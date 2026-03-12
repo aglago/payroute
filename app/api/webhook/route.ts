@@ -88,12 +88,18 @@ export async function POST(request: NextRequest) {
     if (!routingResult.app) {
       console.warn(`⚠️ No destination found for webhook:`, { reference })
 
-      await logToDeadLetter({
+      const deadLetterResult = await logToDeadLetter({
         payload,
         reference: routingResult.reference || undefined,
         reason: 'no_matching_app',
         ip_address: clientIP,
       })
+
+      if (!deadLetterResult.success) {
+        console.error('❌ Failed to log to dead letter queue:', deadLetterResult.error)
+      } else {
+        console.log('📝 Logged to dead letter queue:', deadLetterResult.id)
+      }
 
       tracer.stop()
       await WebhookLogger.log({

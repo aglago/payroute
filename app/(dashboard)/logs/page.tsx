@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import {
   Card,
@@ -66,7 +66,7 @@ export default function LogsPage() {
   const [hasMore, setHasMore] = useState(true)
   const pageSize = 25
 
-  const fetchLogs = async (reset = false) => {
+  const fetchLogs = useCallback(async (reset = false) => {
     setIsLoading(true)
     setError(null)
 
@@ -99,18 +99,18 @@ export default function LogsPage() {
 
       // Extract unique apps for filter
       const uniqueApps = [...new Set(data.logs?.map((l: WebhookLog) => l.destination_app).filter(Boolean))] as string[]
-      if (uniqueApps.length > apps.length) {
-        setApps(uniqueApps)
-      }
+      setApps(prev => uniqueApps.length > prev.length ? uniqueApps : prev)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load logs")
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [page, statusFilter, appFilter, search, activeTab])
 
+  // Reset and fetch when filters or tab change (not when page/search change)
   useEffect(() => {
     fetchLogs(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, appFilter, activeTab])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -330,7 +330,7 @@ export default function LogsPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSearch} className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-50">
               <Label className="text-xs text-muted-foreground">Reference</Label>
               <div className="relative mt-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
