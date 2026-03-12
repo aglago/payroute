@@ -65,6 +65,21 @@ interface AppOption {
   enabled: boolean
 }
 
+interface ForwardAttempt {
+  id: string
+  webhook_log_id: string
+  attempt_number: number
+  attempt_type: "auto" | "manual" | "retry"
+  destination_app: string
+  destination_url: string
+  status: "success" | "failed"
+  response_status?: number
+  response_body?: Record<string, unknown>
+  duration_ms?: number
+  error_message?: string
+  created_at: string
+}
+
 function ResponseBody({ body }: { body: Record<string, unknown> }) {
   const bodyStr = typeof body === "string" ? body : JSON.stringify(body, null, 2)
   const isHtml = bodyStr.includes("<!doctype") || bodyStr.includes("<!DOCTYPE") || bodyStr.includes("<html") || bodyStr.trim().startsWith("<!")
@@ -103,6 +118,7 @@ export default function WebhookLogDetailPage() {
   const id = params.id as string
 
   const [log, setLog] = useState<WebhookLog | null>(null)
+  const [attempts, setAttempts] = useState<ForwardAttempt[]>([])
   const [apps, setApps] = useState<AppOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -115,34 +131,35 @@ export default function WebhookLogDetailPage() {
   const [forwardResult, setForwardResult] = useState<{ success: boolean; error?: string } | null>(null)
   const [selectedAppId, setSelectedAppId] = useState("")
 
-  useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true)
-      setError(null)
+  const fetchData = async () => {
+    setIsLoading(true)
+    setError(null)
 
-      try {
-        const [logRes, appsRes] = await Promise.all([
-          fetch(`/api/admin/logs/${id}`),
-          fetch("/api/admin/apps"),
-        ])
+    try {
+      const [logRes, appsRes] = await Promise.all([
+        fetch(`/api/admin/logs/${id}`),
+        fetch("/api/admin/apps"),
+      ])
 
-        const logData = await logRes.json()
-        const appsData = await appsRes.json()
+      const logData = await logRes.json()
+      const appsData = await appsRes.json()
 
-        if (!logData.success) {
-          setError(logData.message || "Failed to fetch webhook log")
-          return
-        }
-
-        setLog(logData.log)
-        setApps(appsData.apps || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load data")
-      } finally {
-        setIsLoading(false)
+      if (!logData.success) {
+        setError(logData.message || "Failed to fetch webhook log")
+        return
       }
-    }
 
+      setLog(logData.log)
+      setAttempts(logData.attempts || [])
+      setApps(appsData.apps || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load data")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
     if (id) {
       fetchData()
     }
@@ -167,6 +184,10 @@ export default function WebhookLogDetailPage() {
       })
       const data = await res.json()
       setRetryResult({ success: data.success, error: data.message })
+      // Refresh data to show new attempt
+      if (data.success) {
+        fetchData()
+      }
     } catch (err) {
       setRetryResult({ success: false, error: err instanceof Error ? err.message : "Retry failed" })
     } finally {
@@ -187,6 +208,10 @@ export default function WebhookLogDetailPage() {
       })
       const data = await res.json()
       setForwardResult({ success: data.success, error: data.message })
+      // Refresh data to show new attempt
+      if (data.success) {
+        fetchData()
+      }
     } catch (err) {
       setForwardResult({ success: false, error: err instanceof Error ? err.message : "Forward failed" })
     } finally {
@@ -351,10 +376,19 @@ export default function WebhookLogDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="incoming" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="incoming" className="gap-2">
             <ArrowDownLeft className="h-4 w-4" />
             Incoming
+          </TabsTrigger>
+          <TabsTrigger value="attempts" className="gap-2">
+            <RotateCcw className="h-4 w-4" />
+            Attempts
+            {attempts.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {attempts.length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="outgoing" className="gap-2">
             <ArrowUpRight className="h-4 w-4" />
@@ -470,6 +504,134 @@ export default function WebhookLogDetailPage() {
                   )}
                 </pre>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ATTEMPTS TAB */}
+        <TabsContent value="attempts">
+          <Card>
+            <CardHeader className="border-b border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center">
+                    <RotateCcw className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Forward Attempts</CardTitle>
+                    <CardDescription>
+                      {attempts.length === 0
+                        ? "No forward attempts recorded"
+                        : `${attempts.length} attempt${attempts.length === 1 ? "" : "s"} to forward this webhook`
+                      }
+                    </CardDescription>
+                  </div>
+                </div>
+                {log.destination_app && (
+                  <Button
+                    onClick={handleRetry}
+                    disabled={retrying}
+                    variant="outline"
+                    className="gap-2"
+                  >
+                    <RotateCcw className={`h-4 w-4 ${retrying ? "animate-spin" : ""}`} />
+                    {retrying ? "Retrying..." : "Retry"}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {attempts.length > 0 ? (
+                <div className="space-y-4">
+                  {attempts.map((attempt, index) => (
+                    <div
+                      key={attempt.id}
+                      className={`relative pl-8 pb-6 ${index < attempts.length - 1 ? "border-l-2 border-border ml-3" : "ml-3"}`}
+                    >
+                      {/* Timeline dot */}
+                      <div className={`absolute -left-[9px] top-0 w-5 h-5 rounded-full flex items-center justify-center ${
+                        attempt.status === "success" ? "bg-success" : "bg-destructive"
+                      }`}>
+                        {attempt.status === "success" ? (
+                          <CheckCircle2 className="h-3 w-3 text-white" />
+                        ) : (
+                          <XCircle className="h-3 w-3 text-white" />
+                        )}
+                      </div>
+
+                      {/* Attempt card */}
+                      <div className={`ml-4 p-4 rounded-lg border ${
+                        attempt.status === "success" ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <Badge variant={attempt.status === "success" ? "success" : "destructive"}>
+                              {attempt.status === "success" ? "Success" : "Failed"}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              #{attempt.attempt_number} - {attempt.attempt_type}
+                            </Badge>
+                            {attempt.response_status && getHttpStatusBadge(attempt.response_status)}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(attempt.created_at)}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Destination</Label>
+                            <p className="font-medium">{attempt.destination_app}</p>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Duration</Label>
+                            <p className="font-medium">{attempt.duration_ms ? `${attempt.duration_ms}ms` : "—"}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <Label className="text-xs text-muted-foreground">URL</Label>
+                            <p className="font-mono text-xs truncate">{attempt.destination_url}</p>
+                          </div>
+                        </div>
+
+                        {attempt.error_message && (
+                          <div className="mt-3 p-2 bg-destructive/10 rounded text-sm text-destructive">
+                            {attempt.error_message}
+                          </div>
+                        )}
+
+                        {attempt.response_body && (
+                          <details className="mt-3 group">
+                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                              View response body
+                            </summary>
+                            <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto max-h-32 font-mono">
+                              {JSON.stringify(attempt.response_body, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <RotateCcw className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-4">No forward attempts recorded yet</p>
+                  {!log.destination_app && (
+                    <p className="text-sm text-muted-foreground">
+                      This webhook hasn&apos;t been forwarded to any app. Use the Outgoing tab to manually forward it.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {retryResult && (
+                <div className={`mt-4 p-3 rounded-lg text-sm ${
+                  retryResult.success ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                }`}>
+                  {retryResult.success ? "Retry successful! The attempt has been added above." : retryResult.error}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

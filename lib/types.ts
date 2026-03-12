@@ -50,7 +50,7 @@ export interface WebhookLogEntry {
   destination_url?: string
   routing_strategy?: 'metadata' | 'prefix' | 'none' | 'manual'
   reference?: string
-  forward_status?: 'success' | 'failed' | 'skipped' | 'dead_letter'
+  forward_status?: 'success' | 'failed' | 'skipped' | 'dead_letter' | 'pending'
   forward_response_status?: number
   forward_response_body?: unknown
   forward_duration_ms?: number
@@ -82,4 +82,22 @@ export interface RoutingStats {
   byStatus: Record<string, number>
   avgProcessingTime: number
   deadLetterCount: number
+}
+
+export interface ForwardAttemptEntry {
+  webhook_log_id: string
+  attempt_number: number
+  attempt_type: 'auto' | 'manual' | 'retry'
+  destination_app: string
+  destination_url: string
+  status: 'success' | 'failed'
+  response_status?: number
+  response_body?: unknown
+  duration_ms?: number
+  error_message?: string
+}
+
+export interface ForwardAttempt extends ForwardAttemptEntry {
+  id: string
+  created_at: string
 }

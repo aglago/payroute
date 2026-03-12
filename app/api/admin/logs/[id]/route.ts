@@ -1,11 +1,12 @@
 /**
  * Single Webhook Log API
- * Get details of a specific webhook log
+ * Get details of a specific webhook log including forward attempts
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { isAuthenticated } from '@/lib/security'
+import { WebhookLogger } from '@/lib/WebhookLogger'
 import { createClient } from '@/lib/supabase'
 
 async function checkAuth(request: NextRequest): Promise<boolean> {
@@ -38,6 +39,7 @@ export async function GET(
   try {
     const supabase = createClient()
 
+    // Fetch the webhook log
     const { data: log, error } = await supabase
       .from('webhook_logs')
       .select('*')
@@ -51,9 +53,14 @@ export async function GET(
       )
     }
 
+    // Fetch all forward attempts for this webhook
+    const attempts = await WebhookLogger.getAttempts(id)
+
     return NextResponse.json({
       success: true,
       log,
+      attempts,
+      attemptCount: attempts.length,
     })
   } catch (error) {
     console.error('Error fetching webhook log:', error)

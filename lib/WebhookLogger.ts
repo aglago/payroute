@@ -3,7 +3,7 @@
  */
 
 import { createClient } from './supabase'
-import type { WebhookLogEntry, TraceLogEntry } from './types'
+import type { WebhookLogEntry, TraceLogEntry, ForwardAttemptEntry, ForwardAttempt } from './types'
 
 export class WebhookLogger {
   /**
@@ -225,6 +225,124 @@ export class WebhookLogger {
       return { success: true, deletedCount: count || 0 }
     } catch (error) {
       console.error('WebhookLogger deleteOldLogs error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }
+
+  /**
+   * Log a forward attempt for a webhook
+   */
+  static async logAttempt(data: ForwardAttemptEntry): Promise<{ success: boolean; id?: string; error?: string }> {
+    try {
+      const supabase = createClient()
+
+      const { data: result, error } = await supabase
+        .from('webhook_forward_attempts')
+        .insert({
+          webhook_log_id: data.webhook_log_id,
+          attempt_number: data.attempt_number,
+          attempt_type: data.attempt_type,
+          destination_app: data.destination_app,
+          destination_url: data.destination_url,
+          status: data.status,
+          response_status: data.response_status || null,
+          response_body: data.response_body || null,
+          duration_ms: data.duration_ms || null,
+          error_message: data.error_message || null,
+        })
+        .select('id')
+        .single()
+
+      if (error) {
+        console.error('Failed to log forward attempt:', error)
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, id: result?.id }
+    } catch (error) {
+      console.error('WebhookLogger logAttempt error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }
+
+  /**
+   * Get all forward attempts for a webhook
+   */
+  static async getAttempts(webhookLogId: string): Promise<ForwardAttempt[]> {
+    try {
+      const supabase = createClient()
+
+      const { data, error } = await supabase
+        .from('webhook_forward_attempts')
+        .select('*')
+        .eq('webhook_log_id', webhookLogId)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('Failed to get forward attempts:', error)
+        return []
+      }
+
+      return (data || []) as ForwardAttempt[]
+    } catch (error) {
+      console.error('WebhookLogger getAttempts error:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get the count of attempts for a webhook
+   */
+  static async getAttemptCount(webhookLogId: string): Promise<number> {
+    try {
+      const supabase = createClient()
+
+      const { count, error } = await supabase
+        .from('webhook_forward_attempts')
+        .select('*', { count: 'exact', head: true })
+        .eq('webhook_log_id', webhookLogId)
+
+      if (error) {
+        console.error('Failed to count forward attempts:', error)
+        return 0
+      }
+
+      return count || 0
+    } catch (error) {
+      console.error('WebhookLogger getAttemptCount error:', error)
+      return 0
+    }
+  }
+
+  /**
+   * Update the webhook log's forward status based on the latest attempt
+   */
+  static async updateForwardStatus(
+    webhookLogId: string,
+    status: 'success' | 'failed',
+    destinationApp: string,
+    destinationUrl: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const supabase = createClient()
+
+      const { error } = await supabase
+        .from('webhook_logs')
+        .update({
+          forward_status: status,
+          destination_app: destinationApp,
+          destination_url: destinationUrl,
+        })
+        .eq('id', webhookLogId)
+
+      if (error) {
+        console.error('Failed to update forward status:', error)
+        return { success: false, error: error.message }
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error('WebhookLogger updateForwardStatus error:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
   }

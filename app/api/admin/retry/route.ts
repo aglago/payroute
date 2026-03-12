@@ -80,33 +80,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get the current attempt count for this webhook
+    const attemptCount = await WebhookLogger.getAttemptCount(webhookId)
+
     // Re-forward the webhook
-    const startTime = Date.now()
     const forwardResult = await forwardWebhook(
       app,
       webhookLog.payload,
       null // No original signature for retry
     )
 
-    const processingTime = Date.now() - startTime
-
-    // Log the retry attempt
-    await WebhookLogger.log({
-      source: 'paystack-retry',
-      endpoint: '/api/admin/retry',
-      payload: webhookLog.payload,
+    // Log the retry attempt (linked to the original webhook)
+    await WebhookLogger.logAttempt({
+      webhook_log_id: webhookId,
+      attempt_number: attemptCount + 1,
+      attempt_type: 'retry',
       destination_app: app.id,
       destination_url: app.webhookUrl,
-      routing_strategy: webhookLog.routing_strategy,
-      reference: webhookLog.reference,
-      forward_status: forwardResult.success ? 'success' : 'failed',
-      forward_response_status: forwardResult.status,
-      forward_response_body: forwardResult.body,
-      forward_duration_ms: forwardResult.durationMs,
+      status: forwardResult.success ? 'success' : 'failed',
+      response_status: forwardResult.status,
+      response_body: forwardResult.body,
+      duration_ms: forwardResult.durationMs,
       error_message: forwardResult.error,
-      processing_time_ms: processingTime,
-      trace_logs: [{ level: 'info', message: `Retry of webhook ${webhookId}`, timestamp: new Date().toISOString() }],
     })
+
+    // Update the original webhook log's forward status
+    await WebhookLogger.updateForwardStatus(
+      webhookId,
+      forwardResult.success ? 'success' : 'failed',
+      app.id,
+      app.webhookUrl
+    )
 
     if (forwardResult.success) {
       return NextResponse.json({
@@ -114,12 +118,14 @@ export async function POST(request: NextRequest) {
         message: 'Webhook retried successfully',
         status: forwardResult.status,
         durationMs: forwardResult.durationMs,
+        attemptNumber: attemptCount + 1,
       })
     } else {
       return NextResponse.json({
         success: false,
         message: forwardResult.error || 'Forward failed',
         status: forwardResult.status,
+        attemptNumber: attemptCount + 1,
       })
     }
   } catch (error) {

@@ -112,6 +112,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Webhook received, no routing match' })
     }
 
+    tracer.stop()
+    const processingTime = Date.now() - startTime
+
+    // Log the incoming webhook first (before forwarding attempt)
+    const logResult = await WebhookLogger.log({
+      source: 'paystack',
+      endpoint: '/api/webhook',
+      payload,
+      destination_app: routingResult.app.id,
+      destination_url: routingResult.app.webhookUrl,
+      routing_strategy: routingResult.strategy,
+      reference: routingResult.reference || undefined,
+      forward_status: 'pending' as 'success' | 'failed' | 'skipped' | 'dead_letter',
+      ip_address: clientIP,
+      processing_time_ms: processingTime,
+      trace_logs: tracer.getLogs(),
+    })
+
     // Forward to destination app
     console.log(`📤 Forwarding to ${routingResult.app.name}:`, routingResult.app.webhookUrl)
 
@@ -121,27 +139,29 @@ export async function POST(request: NextRequest) {
       signature
     )
 
-    tracer.stop()
-    const processingTime = Date.now() - startTime
+    // Log the forward attempt
+    if (logResult.id) {
+      await WebhookLogger.logAttempt({
+        webhook_log_id: logResult.id,
+        attempt_number: 1,
+        attempt_type: 'auto',
+        destination_app: routingResult.app.id,
+        destination_url: routingResult.app.webhookUrl,
+        status: forwardResult.success ? 'success' : 'failed',
+        response_status: forwardResult.status,
+        response_body: forwardResult.body,
+        duration_ms: forwardResult.durationMs,
+        error_message: forwardResult.error,
+      })
 
-    // Log the result
-    await WebhookLogger.log({
-      source: 'paystack',
-      endpoint: '/api/webhook',
-      payload,
-      destination_app: routingResult.app.id,
-      destination_url: routingResult.app.webhookUrl,
-      routing_strategy: routingResult.strategy,
-      reference: routingResult.reference || undefined,
-      forward_status: forwardResult.success ? 'success' : 'failed',
-      forward_response_status: forwardResult.status,
-      forward_response_body: forwardResult.body,
-      forward_duration_ms: forwardResult.durationMs,
-      ip_address: clientIP,
-      error_message: forwardResult.error,
-      processing_time_ms: processingTime,
-      trace_logs: tracer.getLogs(),
-    })
+      // Update the webhook log's forward status
+      await WebhookLogger.updateForwardStatus(
+        logResult.id,
+        forwardResult.success ? 'success' : 'failed',
+        routingResult.app.id,
+        routingResult.app.webhookUrl
+      )
+    }
 
     if (forwardResult.success) {
       console.log(`✅ Forwarded successfully:`, {
