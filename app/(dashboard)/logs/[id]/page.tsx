@@ -8,6 +8,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
   Badge,
   Button,
   Tabs,
@@ -20,6 +21,7 @@ import {
   ArrowLeft,
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowRight,
   Copy,
   Check,
   RotateCcw,
@@ -31,6 +33,7 @@ import {
   CheckCircle2,
   XCircle,
   ExternalLink,
+  Zap,
 } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 
@@ -245,6 +248,8 @@ export default function WebhookLogDetailPage() {
     )
   }
 
+  const eventType = (log.payload as Record<string, unknown>)?.event as string || "Unknown"
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -255,10 +260,10 @@ export default function WebhookLogDetailPage() {
             Back
           </Link>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3">
-              <code className="text-lg bg-muted px-2 py-1 rounded">{log.reference}</code>
+            <div className="flex items-center gap-3">
+              <code className="text-xl font-bold bg-muted px-2 py-1 rounded">{log.reference}</code>
               {getStatusBadge(log.forward_status)}
-            </h1>
+            </div>
             <p className="text-sm text-muted-foreground mt-1">
               {formatDate(log.created_at)}
             </p>
@@ -266,45 +271,83 @@ export default function WebhookLogDetailPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs">Total Time</span>
+      {/* Visual Flow Diagram */}
+      <Card className="bg-muted/30">
+        <CardContent className="py-6">
+          <div className="flex items-center justify-center gap-4 text-center">
+            {/* Paystack */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Zap className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Paystack</p>
+                <p className="text-xs text-muted-foreground">{eventType}</p>
+              </div>
             </div>
-            <p className="text-2xl font-bold">{log.processing_time_ms}ms</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <ArrowUpRight className="h-4 w-4" />
-              <span className="text-xs">Forward Time</span>
+
+            {/* Arrow */}
+            <div className="flex flex-col items-center gap-1">
+              <ArrowRight className="h-6 w-6 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">{log.processing_time_ms}ms</span>
             </div>
-            <p className="text-2xl font-bold">{log.forward_duration_ms || "—"}ms</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Server className="h-4 w-4" />
-              <span className="text-xs">Destination</span>
+
+            {/* PayRoute */}
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-16 h-16 rounded-full bg-secondary/50 flex items-center justify-center">
+                <Server className="h-8 w-8 text-foreground" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">PayRoute</p>
+                <p className="text-xs text-muted-foreground">{log.routing_strategy}</p>
+              </div>
             </div>
-            <p className="text-lg font-bold truncate">{log.destination_app || "None"}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Globe className="h-4 w-4" />
-              <span className="text-xs">Routing</span>
+
+            {/* Arrow */}
+            <div className="flex flex-col items-center gap-1">
+              {log.destination_app ? (
+                <>
+                  <ArrowRight className={`h-6 w-6 ${
+                    log.forward_status === "success" ? "text-success" :
+                    log.forward_status === "failed" ? "text-destructive" :
+                    "text-warning"
+                  }`} />
+                  <span className="text-xs text-muted-foreground">
+                    {log.forward_duration_ms ? `${log.forward_duration_ms}ms` : "—"}
+                  </span>
+                </>
+              ) : (
+                <XCircle className="h-6 w-6 text-warning" />
+              )}
             </div>
-            <p className="text-lg font-bold">{log.routing_strategy || "none"}</p>
-          </CardContent>
-        </Card>
-      </div>
+
+            {/* Destination */}
+            <div className="flex flex-col items-center gap-2">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                log.forward_status === "success" ? "bg-success/10" :
+                log.forward_status === "failed" ? "bg-destructive/10" :
+                "bg-warning/10"
+              }`}>
+                {log.destination_app ? (
+                  <Globe className={`h-8 w-8 ${
+                    log.forward_status === "success" ? "text-success" :
+                    log.forward_status === "failed" ? "text-destructive" :
+                    "text-warning"
+                  }`} />
+                ) : (
+                  <AlertCircle className="h-8 w-8 text-warning" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-sm">{log.destination_app || "No Destination"}</p>
+                {log.forward_response_status && (
+                  <p className="text-xs">{getHttpStatusBadge(log.forward_response_status)}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Tabs defaultValue="incoming" className="space-y-4">
@@ -326,15 +369,20 @@ export default function WebhookLogDetailPage() {
         {/* INCOMING TAB */}
         <TabsContent value="incoming">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ArrowDownLeft className="h-5 w-5 text-primary" />
-                Request from Paystack
-              </CardTitle>
+            <CardHeader className="border-b border-border bg-primary/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <ArrowDownLeft className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Received from Paystack</CardTitle>
+                  <CardDescription>What PayRoute received from Paystack&apos;s webhook</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="pt-6 space-y-6">
               {/* Request Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
                   <Label className="text-xs text-muted-foreground">Method</Label>
                   <p className="font-mono font-medium">{log.method || "POST"}</p>
@@ -349,9 +397,7 @@ export default function WebhookLogDetailPage() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Event Type</Label>
-                  <p className="font-mono font-medium">
-                    {(log.payload as Record<string, unknown>)?.event as string || "Unknown"}
-                  </p>
+                  <p className="font-mono font-medium">{eventType}</p>
                 </div>
               </div>
 
@@ -406,9 +452,10 @@ export default function WebhookLogDetailPage() {
               </div>
 
               {/* Response to Paystack */}
-              <div>
+              <div className="border-t pt-6">
                 <Label className="text-sm font-medium">Response Sent to Paystack</Label>
-                <pre className="mt-2 p-4 bg-muted rounded-lg text-xs overflow-x-auto font-mono">
+                <p className="text-xs text-muted-foreground mb-2">PayRoute always returns 200 to prevent retries</p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto font-mono">
                   {JSON.stringify(
                     {
                       status: 200,
@@ -430,17 +477,34 @@ export default function WebhookLogDetailPage() {
         {/* OUTGOING TAB */}
         <TabsContent value="outgoing">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ArrowUpRight className="h-5 w-5 text-primary" />
-                Request to Destination App
-              </CardTitle>
+            <CardHeader className={`border-b border-border ${
+              log.forward_status === "success" ? "bg-success/5" :
+              log.forward_status === "failed" ? "bg-destructive/5" :
+              "bg-warning/5"
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  log.forward_status === "success" ? "bg-success/10" :
+                  log.forward_status === "failed" ? "bg-destructive/10" :
+                  "bg-warning/10"
+                }`}>
+                  <ArrowUpRight className={`h-5 w-5 ${
+                    log.forward_status === "success" ? "text-success" :
+                    log.forward_status === "failed" ? "text-destructive" :
+                    "text-warning"
+                  }`} />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Forwarded to Destination</CardTitle>
+                  <CardDescription>What PayRoute sent to your app</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="pt-6 space-y-6">
               {log.destination_app ? (
                 <>
                   {/* Request Info */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                     <div>
                       <Label className="text-xs text-muted-foreground">Destination App</Label>
                       <p className="font-medium">{log.destination_app}</p>
@@ -452,6 +516,10 @@ export default function WebhookLogDetailPage() {
                     <div>
                       <Label className="text-xs text-muted-foreground">Duration</Label>
                       <p className="font-medium">{log.forward_duration_ms || "—"}ms</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Routing</Label>
+                      <p className="font-medium">{log.routing_strategy}</p>
                     </div>
                   </div>
 
@@ -515,9 +583,12 @@ export default function WebhookLogDetailPage() {
                   </div>
 
                   {/* Response */}
-                  <div className="border-t border-border pt-6">
+                  <div className="border-t pt-6">
                     <div className="flex items-center justify-between mb-4">
-                      <Label className="text-sm font-medium">Response from Destination</Label>
+                      <div>
+                        <Label className="text-sm font-medium">Response from Destination</Label>
+                        <p className="text-xs text-muted-foreground">What your app returned</p>
+                      </div>
                       {log.forward_response_status && getHttpStatusBadge(log.forward_response_status)}
                     </div>
 
@@ -540,7 +611,7 @@ export default function WebhookLogDetailPage() {
 
                   {/* Retry Button */}
                   {(log.forward_status === "failed") && (
-                    <div className="border-t border-border pt-6">
+                    <div className="border-t pt-6">
                       {retryResult && (
                         <div className={`mb-4 p-3 rounded-lg text-sm ${retryResult.success ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
                           {retryResult.success ? "Webhook retried successfully!" : retryResult.error}
@@ -603,13 +674,18 @@ export default function WebhookLogDetailPage() {
         {/* TRACE TAB */}
         <TabsContent value="trace">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Server className="h-5 w-5 text-primary" />
-                Processing Trace
-              </CardTitle>
+            <CardHeader className="border-b border-border bg-secondary/20">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center">
+                  <Server className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Processing Trace</CardTitle>
+                  <CardDescription>Detailed logs from PayRoute processing</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               {log.trace_logs && log.trace_logs.length > 0 ? (
                 <div className="space-y-2">
                   {log.trace_logs.map((entry, i) => (

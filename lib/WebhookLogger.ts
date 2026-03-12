@@ -58,6 +58,7 @@ export class WebhookLogger {
     destination_app?: string
     forward_status?: string
     reference?: string
+    source?: string
     limit?: number
     offset?: number
   } = {}): Promise<unknown[]> {
@@ -79,6 +80,10 @@ export class WebhookLogger {
 
       if (options.reference) {
         query = query.eq('reference', options.reference)
+      }
+
+      if (options.source) {
+        query = query.eq('source', options.source)
       }
 
       if (options.limit) {
