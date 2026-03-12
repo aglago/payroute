@@ -342,6 +342,7 @@ export class WebhookLogger {
           forward_response_body: data.response_body || null,
           forward_duration_ms: data.duration_ms || null,
           error_message: data.error_message || null,
+          last_attempt_at: new Date().toISOString(),
         })
         .eq('id', webhookLogId)
 

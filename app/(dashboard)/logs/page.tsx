@@ -47,6 +47,7 @@ interface WebhookLog {
   ip_address?: string
   event_type?: string
   created_at: string
+  last_attempt_at?: string
 }
 
 export default function LogsPage() {
@@ -294,7 +295,9 @@ export default function LogsPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
               )}
-              <p className="text-xs text-muted-foreground">{formatDate(log.created_at)}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatDate(log.last_attempt_at || log.created_at)}
+              </p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>

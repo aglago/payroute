@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
     ip_address: log.ip_address,
     event_type: (log.payload as Record<string, unknown>)?.event as string || null,
     created_at: log.created_at,
+    last_attempt_at: log.last_attempt_at,
   }))
 
   return NextResponse.json({
