@@ -1,6 +1,6 @@
 # PayRoute
 
-A lightweight webhook router for Paystack. Receive webhooks from a single Paystack account and route them to multiple destination apps.
+Lightweight webhook router for Paystack. Routes incoming webhooks to multiple destination apps based on metadata or reference prefix. Built with Next.js, Supabase, and TypeScript.
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
@@ -45,6 +45,9 @@ cp .env.example .env.local
 Edit `.env.local`:
 
 ```env
+# App URL (for SEO/sitemap)
+NEXT_PUBLIC_APP_URL=https://your-payroute-domain.vercel.app
+
 # Supabase (for logging)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key

@@ -1,0 +1,8 @@
+export { Button, buttonVariants } from "./button"
+export { Badge, badgeVariants } from "./badge"
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from "./card"
+export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs"
+export { Input } from "./input"
+export { Switch } from "./switch"
+export { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./dialog"
+export { Label } from "./label"
