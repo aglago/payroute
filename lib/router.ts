@@ -3,8 +3,20 @@
  * Determines which app should receive a webhook based on metadata or reference prefix
  */
 
+import crypto from 'crypto'
 import type { AppConfig, PaystackWebhookPayload, RoutingResult } from './types'
 import { getAppRegistry, getApp, getEnabledApps } from './config'
+
+/**
+ * Create HMAC signature for webhook forwarding
+ * Uses the same algorithm as Paystack for consistency
+ */
+function createRouterSignature(body: string, secret: string): string {
+  return crypto
+    .createHmac('sha512', secret)
+    .update(body)
+    .digest('hex')
+}
 
 /**
  * Determine the destination app for a webhook payload
@@ -76,16 +88,19 @@ export async function forwardWebhook(
   const startTime = Date.now()
 
   try {
+    const bodyString = JSON.stringify(payload)
+    const routerSignature = createRouterSignature(bodyString, app.routerSecret)
+
     const response = await fetch(app.webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Router-Secret': app.routerSecret,
+        'X-PayRoute-Signature': routerSignature,
         'X-Original-Signature': originalSignature || '',
         'X-Routed-By': 'payroute',
         'X-Routed-At': new Date().toISOString(),
       },
-      body: JSON.stringify(payload),
+      body: bodyString,
     })
 
     const durationMs = Date.now() - startTime

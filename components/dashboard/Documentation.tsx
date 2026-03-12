@@ -461,12 +461,13 @@ Content-Type: application/json
       <Section title="Receiving Webhooks in Your App">
         <div className="space-y-4">
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-            <h4 className="font-medium text-primary mb-2">How X-Router-Secret Works</h4>
+            <h4 className="font-medium text-primary mb-2">How X-PayRoute-Signature Works</h4>
             <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
               <li>When you add an app in PayRoute, a <strong>unique secret is auto-generated</strong></li>
               <li>This secret is shown to you <strong>only once</strong> - save it immediately</li>
               <li>Configure your app with this secret (e.g., <code className="bg-muted px-1 rounded">PAYROUTE_SECRET</code>)</li>
-              <li>When webhooks arrive, verify the <code className="bg-muted px-1 rounded">X-Router-Secret</code> header matches</li>
+              <li>PayRoute signs each request body using HMAC-SHA512 with your secret</li>
+              <li>Your app verifies the <code className="bg-muted px-1 rounded">X-PayRoute-Signature</code> header</li>
             </ol>
           </div>
 
@@ -484,8 +485,8 @@ Content-Type: application/json
               </thead>
               <tbody>
                 <tr className="border-b border-border">
-                  <td className="py-2 font-mono text-xs">X-Router-Secret</td>
-                  <td className="py-2 text-muted-foreground">Auto-generated secret for your app (verify this!)</td>
+                  <td className="py-2 font-mono text-xs">X-PayRoute-Signature</td>
+                  <td className="py-2 text-muted-foreground">HMAC-SHA512 signature of the body using your secret (verify this!)</td>
                 </tr>
                 <tr className="border-b border-border">
                   <td className="py-2 font-mono text-xs">X-Original-Signature</td>
@@ -507,16 +508,26 @@ Content-Type: application/json
             <h4 className="font-medium mb-2">Example Handler (Next.js)</h4>
             <CodeBlock language="typescript" code={`// app/api/webhooks/paystack/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+
+function verifyPayRouteSignature(body: string, signature: string): boolean {
+  const secret = process.env.PAYROUTE_SECRET;
+  if (!secret) return false;
+  const hash = crypto.createHmac("sha512", secret).update(body).digest("hex");
+  return hash === signature;
+}
 
 export async function POST(request: NextRequest) {
-  // Step 1: Verify the request is from PayRoute
-  const routerSecret = request.headers.get("x-router-secret");
-  if (routerSecret !== process.env.PAYROUTE_SECRET) {
+  const body = await request.text();
+
+  // Step 1: Verify the request is from PayRoute (HMAC signature)
+  const signature = request.headers.get("x-payroute-signature");
+  if (!signature || !verifyPayRouteSignature(body, signature)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // Step 2: Parse the webhook payload
-  const payload = await request.json();
+  const payload = JSON.parse(body);
   const { event, data } = payload;
 
   // Step 3: Handle different event types
@@ -527,7 +538,6 @@ export async function POST(request: NextRequest) {
     case "charge.failed":
       await handleFailedPayment(data);
       break;
-    // ... handle other events
   }
 
   return NextResponse.json({ success: true });
@@ -537,16 +547,26 @@ export async function POST(request: NextRequest) {
           <div>
             <h4 className="font-medium mb-2">Example Handler (Express.js)</h4>
             <CodeBlock language="javascript" code={`// routes/webhooks.js
-app.post("/api/webhooks/paystack", (req, res) => {
-  // Verify PayRoute secret
-  const routerSecret = req.headers["x-router-secret"];
-  if (routerSecret !== process.env.PAYROUTE_SECRET) {
+const crypto = require("crypto");
+
+function verifyPayRouteSignature(body, signature) {
+  const secret = process.env.PAYROUTE_SECRET;
+  if (!secret) return false;
+  const hash = crypto.createHmac("sha512", secret).update(body).digest("hex");
+  return hash === signature;
+}
+
+// Use express.raw() middleware for this route
+app.post("/api/webhooks/paystack", express.raw({ type: "*/*" }), (req, res) => {
+  const body = req.body.toString();
+  const signature = req.headers["x-payroute-signature"];
+
+  if (!signature || !verifyPayRouteSignature(body, signature)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { event, data } = req.body;
+  const { event, data } = JSON.parse(body);
 
-  // Handle the webhook
   if (event === "charge.success") {
     // Process successful payment
   }
@@ -563,14 +583,17 @@ app.post("/api/webhooks/paystack", (req, res) => {
           <div>
             <h4 className="font-medium mb-2">Signature Verification</h4>
             <p className="text-sm text-muted-foreground">
-              PayRoute verifies the Paystack signature before routing:
+              PayRoute uses HMAC-SHA512 signatures at every step:
             </p>
             <ol className="text-sm text-muted-foreground mt-2 list-decimal list-inside space-y-1">
               <li>Paystack signs the request with your secret key</li>
               <li>PayRoute verifies using <code className="bg-muted px-1 rounded">PAYSTACK_SECRET_KEY</code></li>
-              <li>If valid, the webhook is routed</li>
-              <li>Your app receives <code className="bg-muted px-1 rounded">X-Router-Secret</code> to verify the forward</li>
+              <li>PayRoute re-signs the body with your app&apos;s <code className="bg-muted px-1 rounded">routerSecret</code></li>
+              <li>Your app verifies <code className="bg-muted px-1 rounded">X-PayRoute-Signature</code> using the same HMAC algorithm</li>
             </ol>
+            <p className="text-sm text-muted-foreground mt-2">
+              This ensures the secret is never transmitted - only the signature is sent.
+            </p>
           </div>
 
           <div>

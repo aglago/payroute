@@ -418,7 +418,7 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onUpdateApp, onDelete
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
-                        Your app should verify this in the X-Router-Secret header.
+                        PayRoute signs requests with this secret. Verify the X-PayRoute-Signature header.
                       </p>
                     </div>
                   )}
@@ -502,7 +502,7 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onUpdateApp, onDelete
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Your app should verify this secret in the X-Router-Secret header.
+                    PayRoute signs requests with this secret. Verify the X-PayRoute-Signature header.
                   </p>
                 </div>
               </div>

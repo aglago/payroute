@@ -484,7 +484,7 @@ export default function WebhookLogDetailPage() {
                         {JSON.stringify(
                           {
                             "Content-Type": "application/json",
-                            "X-Router-Secret": "••••••••",
+                            "X-PayRoute-Signature": "••••••••",
                             "X-Original-Signature": "••••••••",
                             "X-Routed-By": "payroute",
                             "X-Routed-At": log.created_at,
