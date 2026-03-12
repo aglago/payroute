@@ -245,10 +245,10 @@ export class WebhookLogger {
           destination_app: data.destination_app,
           destination_url: data.destination_url,
           status: data.status,
-          response_status: data.response_status || null,
-          response_body: data.response_body || null,
-          duration_ms: data.duration_ms || null,
-          error_message: data.error_message || null,
+          response_status: data.response_status ?? null,
+          response_body: data.response_body ?? null,
+          duration_ms: data.duration_ms ?? null,
+          error_message: data.error_message ?? null,
         })
         .select('id')
         .single()
@@ -338,10 +338,10 @@ export class WebhookLogger {
           forward_status: data.status,
           destination_app: data.destination_app,
           destination_url: data.destination_url,
-          forward_response_status: data.response_status || null,
-          forward_response_body: data.response_body || null,
-          forward_duration_ms: data.duration_ms || null,
-          error_message: data.error_message || null,
+          forward_response_status: data.response_status ?? null,
+          forward_response_body: data.response_body ?? null,
+          forward_duration_ms: data.duration_ms ?? null,
+          error_message: data.error_message ?? null,
           last_attempt_at: new Date().toISOString(),
         })
         .eq('id', webhookLogId)
