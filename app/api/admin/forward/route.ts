@@ -1,0 +1,136 @@
+/**
+ * Manual Forward Webhook API
+ * Forward a webhook to a specific app (for unrouted or dead letter webhooks)
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { isAuthenticated, forwardWebhook, WebhookLogger } from '@/lib'
+import { getAppRegistry } from '@/lib/config'
+import { createClient } from '@/lib/supabase'
+
+async function checkAuth(request: NextRequest): Promise<boolean> {
+  const cookieStore = await cookies()
+  const sessionToken = cookieStore.get('payroute_session')?.value
+  return isAuthenticated(request.headers, sessionToken)
+}
+
+/**
+ * POST /api/admin/forward - Manually forward a webhook to a specific app
+ */
+export async function POST(request: NextRequest) {
+  // Validate admin key or session
+  if (!await checkAuth(request)) {
+    return NextResponse.json(
+      { success: false, message: 'Unauthorized' },
+      { status: 401 }
+    )
+  }
+
+  try {
+    const body = await request.json()
+    const { webhookId, appId } = body
+
+    if (!webhookId || !appId) {
+      return NextResponse.json(
+        { success: false, message: 'Missing webhookId or appId' },
+        { status: 400 }
+      )
+    }
+
+    // Get the original webhook log
+    const supabase = createClient()
+    const { data: webhookLog, error: fetchError } = await supabase
+      .from('webhook_logs')
+      .select('*')
+      .eq('id', webhookId)
+      .single()
+
+    if (fetchError || !webhookLog) {
+      return NextResponse.json(
+        { success: false, message: 'Webhook not found' },
+        { status: 404 }
+      )
+    }
+
+    // Get the app configuration
+    const appRegistry = await getAppRegistry()
+    const app = appRegistry[appId]
+
+    if (!app) {
+      return NextResponse.json(
+        { success: false, message: `App "${appId}" not found in registry` },
+        { status: 404 }
+      )
+    }
+
+    if (!app.enabled) {
+      return NextResponse.json(
+        { success: false, message: `App "${appId}" is disabled` },
+        { status: 400 }
+      )
+    }
+
+    // Forward the webhook
+    const startTime = Date.now()
+    const forwardResult = await forwardWebhook(
+      app,
+      webhookLog.payload,
+      null // No original signature for manual forward
+    )
+
+    const processingTime = Date.now() - startTime
+
+    // Log the manual forward attempt
+    await WebhookLogger.log({
+      source: 'paystack-manual',
+      endpoint: '/api/admin/forward',
+      payload: webhookLog.payload,
+      destination_app: app.id,
+      destination_url: app.webhookUrl,
+      routing_strategy: 'manual',
+      reference: webhookLog.reference,
+      forward_status: forwardResult.success ? 'success' : 'failed',
+      forward_response_status: forwardResult.status,
+      forward_response_body: forwardResult.body,
+      forward_duration_ms: forwardResult.durationMs,
+      error_message: forwardResult.error,
+      processing_time_ms: processingTime,
+      trace_logs: [{ level: 'info', message: `Manual forward of webhook ${webhookId} to app ${appId}`, timestamp: new Date().toISOString() }],
+    })
+
+    // If this was a dead letter entry, mark it as resolved
+    if (webhookLog.forward_status === 'dead_letter') {
+      await supabase
+        .from('dead_letter_webhooks')
+        .update({
+          reviewed: true,
+          reviewed_at: new Date().toISOString(),
+          resolution: forwardResult.success ? 'forwarded' : 'forward_failed',
+          forwarded_to: appId,
+        })
+        .eq('reference', webhookLog.reference)
+    }
+
+    if (forwardResult.success) {
+      return NextResponse.json({
+        success: true,
+        message: `Webhook forwarded to ${app.name}`,
+        status: forwardResult.status,
+        durationMs: forwardResult.durationMs,
+      })
+    } else {
+      return NextResponse.json({
+        success: false,
+        message: forwardResult.error || 'Forward failed',
+        status: forwardResult.status,
+      })
+    }
+  } catch (error) {
+    console.error('Manual forward error:', error)
+    return NextResponse.json(
+      { success: false, message: error instanceof Error ? error.message : 'Forward failed' },
+      { status: 500 }
+    )
+  }
+}

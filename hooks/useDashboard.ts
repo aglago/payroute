@@ -32,6 +32,7 @@ interface WebhookLog {
   forward_status: "success" | "failed" | "dead_letter"
   forward_response_status?: number
   forward_response_body?: Record<string, unknown>
+  forward_duration_ms?: number
   processing_time_ms: number
   ip_address?: string
   payload?: Record<string, unknown>
@@ -185,6 +186,26 @@ export function useDeleteApp() {
   })
 }
 
+export function useUpdateApp() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ appId, ...updates }: { appId: string; name?: string; webhookUrl?: string; prefixes?: string[]; description?: string }) => {
+      const res = await fetch("/api/admin/apps", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appId, ...updates }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.message || "Failed to update app")
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apps"] })
+    },
+  })
+}
+
 export function useRetryWebhook() {
   const queryClient = useQueryClient()
 
@@ -201,6 +222,27 @@ export function useRetryWebhook() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhooks"] })
+    },
+  })
+}
+
+export function useManualForward() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ webhookId, appId }: { webhookId: string; appId: string }) => {
+      const res = await fetch("/api/admin/forward", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookId, appId }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.message || "Failed to forward webhook")
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["webhooks"] })
+      queryClient.invalidateQueries({ queryKey: ["deadLetters"] })
     },
   })
 }
@@ -249,6 +291,21 @@ export function useLogout() {
     onSuccess: () => {
       queryClient.setQueryData(["session"], false)
       queryClient.clear() // Clear all cached data
+    },
+  })
+}
+
+export function useRevealSecret() {
+  return useMutation({
+    mutationFn: async ({ appId, adminKey }: { appId: string; adminKey: string }) => {
+      const res = await fetch("/api/admin/apps/secret", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appId, adminKey }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.message || "Failed to reveal secret")
+      return data.secret as string
     },
   })
 }

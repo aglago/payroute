@@ -19,7 +19,7 @@ import {
   DialogFooter,
   Label,
 } from "@/components/ui"
-import { ExternalLink, Settings, Plus, Trash2, Copy, Check, AlertCircle } from "lucide-react"
+import { ExternalLink, Settings, Plus, Trash2, Copy, Check, AlertCircle, Eye, EyeOff, Key, Pencil } from "lucide-react"
 
 interface AppConfig {
   id: string
@@ -41,17 +41,37 @@ interface AppRegistryProps {
   apps: AppConfig[]
   onToggleApp?: (appId: string, enabled: boolean) => void
   onAddApp?: (app: Omit<AppConfig, "id" | "enabled" | "source"> & { appId: string }) => Promise<{ success: boolean; error?: string; routerSecret?: string }>
+  onUpdateApp?: (appId: string, updates: { name?: string; webhookUrl?: string; prefixes?: string[]; description?: string }) => Promise<{ success: boolean; error?: string }>
   onDeleteApp?: (appId: string) => Promise<{ success: boolean; error?: string }>
+  onRevealSecret?: (appId: string, adminKey: string) => Promise<string>
   onRefresh?: () => void
 }
 
-export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefresh }: AppRegistryProps) {
+export function AppRegistry({ apps, onToggleApp, onAddApp, onUpdateApp, onDeleteApp, onRevealSecret, onRefresh }: AppRegistryProps) {
   const [expandedApp, setExpandedApp] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copiedSecret, setCopiedSecret] = useState<string | null>(null)
   const [newAppSecret, setNewAppSecret] = useState<string | null>(null)
+
+  // Secret reveal state
+  const [revealingAppId, setRevealingAppId] = useState<string | null>(null)
+  const [revealAdminKey, setRevealAdminKey] = useState("")
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, string>>({})
+  const [revealError, setRevealError] = useState<string | null>(null)
+  const [isRevealing, setIsRevealing] = useState(false)
+
+  // Edit state
+  const [editingApp, setEditingApp] = useState<AppConfig | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    webhookUrl: "",
+    prefixes: "",
+    description: "",
+  })
+  const [editError, setEditError] = useState<string | null>(null)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -129,6 +149,72 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
       onRefresh?.()
     } else {
       alert(result.error || "Failed to delete app")
+    }
+  }
+
+  const handleRevealSecret = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!revealingAppId || !onRevealSecret) return
+
+    setIsRevealing(true)
+    setRevealError(null)
+
+    try {
+      const secret = await onRevealSecret(revealingAppId, revealAdminKey)
+      setRevealedSecrets((prev) => ({ ...prev, [revealingAppId]: secret }))
+      setRevealingAppId(null)
+      setRevealAdminKey("")
+    } catch (err) {
+      setRevealError(err instanceof Error ? err.message : "Failed to reveal secret")
+    } finally {
+      setIsRevealing(false)
+    }
+  }
+
+  const hideSecret = (appId: string) => {
+    setRevealedSecrets((prev) => {
+      const next = { ...prev }
+      delete next[appId]
+      return next
+    })
+  }
+
+  const openEditDialog = (app: AppConfig) => {
+    setEditingApp(app)
+    setEditFormData({
+      name: app.name,
+      webhookUrl: app.webhookUrl,
+      prefixes: app.prefixes.join(", "),
+      description: app.description || "",
+    })
+    setEditError(null)
+  }
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingApp || !onUpdateApp) return
+
+    setIsUpdating(true)
+    setEditError(null)
+
+    try {
+      const result = await onUpdateApp(editingApp.id, {
+        name: editFormData.name,
+        webhookUrl: editFormData.webhookUrl,
+        prefixes: editFormData.prefixes.split(",").map((p) => p.trim()).filter(Boolean),
+        description: editFormData.description,
+      })
+
+      if (result.success) {
+        setEditingApp(null)
+        onRefresh?.()
+      } else {
+        setEditError(result.error || "Failed to update app")
+      }
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update app")
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -279,12 +365,81 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
                       Comma-separated prefixes for reference-based routing
                     </p>
                   </div>
-                  {app.source === "env" && (
+                  {app.source !== "env" && onRevealSecret && (
+                    <div>
+                      <Label className="text-sm font-medium">Router Secret</Label>
+                      {revealedSecrets[app.id] ? (
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            value={revealedSecrets[app.id]}
+                            readOnly
+                            className="font-mono text-sm"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleCopySecret(revealedSecrets[app.id])}
+                            title="Copy secret"
+                          >
+                            {copiedSecret === revealedSecrets[app.id] ? (
+                              <Check className="h-4 w-4 text-success" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => hideSecret(app.id)}
+                            title="Hide secret"
+                          >
+                            <EyeOff className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            value="••••••••••••••••••••••••••••••••"
+                            readOnly
+                            className="font-mono text-sm text-muted-foreground"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              setRevealingAppId(app.id)
+                              setRevealError(null)
+                              setRevealAdminKey("")
+                            }}
+                            title="View secret"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Your app should verify this in the X-Router-Secret header.
+                      </p>
+                    </div>
+                  )}
+                  {app.source === "env" ? (
                     <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                       <AlertCircle className="h-4 w-4 text-muted-foreground" />
                       <p className="text-xs text-muted-foreground">
                         This app is configured via environment variables and cannot be modified here.
                       </p>
+                    </div>
+                  ) : onUpdateApp && (
+                    <div className="pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => openEditDialog(app)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Edit App
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -452,6 +607,139 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reveal Secret Dialog */}
+      <Dialog open={!!revealingAppId} onOpenChange={(open) => !open && setRevealingAppId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleRevealSecret}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5" />
+                View Router Secret
+              </DialogTitle>
+              <DialogDescription>
+                Enter your admin API key to view the router secret for this app.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {revealError && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                  <AlertCircle className="h-4 w-4" />
+                  <p className="text-sm">{revealError}</p>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="revealAdminKey">Admin API Key</Label>
+                <Input
+                  id="revealAdminKey"
+                  type="password"
+                  value={revealAdminKey}
+                  onChange={(e) => setRevealAdminKey(e.target.value)}
+                  placeholder="Enter your ADMIN_API_KEY"
+                  required
+                  className="mt-1"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRevealingAppId(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isRevealing || !revealAdminKey}>
+                {isRevealing ? "Verifying..." : "View Secret"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit App Dialog */}
+      <Dialog open={!!editingApp} onOpenChange={(open) => !open && setEditingApp(null)}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleUpdate}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-5 w-5" />
+                Edit App
+              </DialogTitle>
+              <DialogDescription>
+                Update the configuration for {editingApp?.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                  <AlertCircle className="h-4 w-4" />
+                  <p className="text-sm">{editError}</p>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="editName">App Name *</Label>
+                <Input
+                  id="editName"
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  placeholder="My App"
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="editWebhookUrl">Webhook URL *</Label>
+                <Input
+                  id="editWebhookUrl"
+                  type="url"
+                  value={editFormData.webhookUrl}
+                  onChange={(e) => setEditFormData({ ...editFormData, webhookUrl: e.target.value })}
+                  placeholder="https://myapp.com/api/webhooks/paystack"
+                  required
+                  className="mt-1 font-mono"
+                />
+              </div>
+              <div>
+                <Label htmlFor="editPrefixes">Reference Prefixes</Label>
+                <Input
+                  id="editPrefixes"
+                  value={editFormData.prefixes}
+                  onChange={(e) => setEditFormData({ ...editFormData, prefixes: e.target.value })}
+                  placeholder="MYAPP-, MA-"
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Comma-separated prefixes for fallback routing.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="editDescription">Description</Label>
+                <Input
+                  id="editDescription"
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Brief description of this app"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditingApp(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isUpdating}>
+                {isUpdating ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

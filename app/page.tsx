@@ -21,8 +21,9 @@ import {
   useDeadLetters,
   useToggleApp,
   useAddApp,
+  useUpdateApp,
   useDeleteApp,
-  useRetryWebhook,
+  useRevealSecret,
 } from "@/hooks/useDashboard"
 
 // Types
@@ -107,8 +108,9 @@ function DashboardContent() {
   // Mutations
   const toggleAppMutation = useToggleApp()
   const addAppMutation = useAddApp()
+  const updateAppMutation = useUpdateApp()
   const deleteAppMutation = useDeleteApp()
-  const retryWebhookMutation = useRetryWebhook()
+  const revealSecretMutation = useRevealSecret()
 
   // Derived state
   const stats = statsQuery.data ?? {
@@ -148,6 +150,15 @@ function DashboardContent() {
     })
   }
 
+  const handleUpdateApp = async (appId: string, updates: { name?: string; webhookUrl?: string; prefixes?: string[]; description?: string }) => {
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      updateAppMutation.mutate({ appId, ...updates }, {
+        onSuccess: () => resolve({ success: true }),
+        onError: (error) => resolve({ success: false, error: error.message }),
+      })
+    })
+  }
+
   const handleDeleteApp = async (appId: string) => {
     return new Promise<{ success: boolean; error?: string }>((resolve) => {
       deleteAppMutation.mutate(appId, {
@@ -164,13 +175,8 @@ function DashboardContent() {
     deadLettersQuery.refetch()
   }
 
-  const handleRetryWebhook = async (webhookId: string) => {
-    return new Promise<{ success: boolean; error?: string }>((resolve) => {
-      retryWebhookMutation.mutate(webhookId, {
-        onSuccess: () => resolve({ success: true }),
-        onError: (error) => resolve({ success: false, error: error.message }),
-      })
-    })
+  const handleRevealSecret = async (appId: string, adminKey: string) => {
+    return revealSecretMutation.mutateAsync({ appId, adminKey })
   }
 
   return (
@@ -227,7 +233,6 @@ function DashboardContent() {
               <RecentWebhooks
                 webhooks={webhooks}
                 onRefresh={handleRefresh}
-                onRetry={handleRetryWebhook}
                 isLoading={isLoading}
               />
               <DeadLetterQueue
@@ -242,7 +247,9 @@ function DashboardContent() {
               apps={apps}
               onToggleApp={handleToggleApp}
               onAddApp={handleAddApp}
+              onUpdateApp={handleUpdateApp}
               onDeleteApp={handleDeleteApp}
+              onRevealSecret={handleRevealSecret}
               onRefresh={handleRefresh}
             />
           </TabsContent>
@@ -251,8 +258,8 @@ function DashboardContent() {
             <RecentWebhooks
               webhooks={webhooks}
               onRefresh={handleRefresh}
-              onRetry={handleRetryWebhook}
               isLoading={isLoading}
+              showViewAll={false}
             />
           </TabsContent>
 
