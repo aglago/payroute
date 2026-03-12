@@ -143,7 +143,7 @@ export function useAddApp() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (app: Omit<AppConfig, "id" | "enabled" | "source">) => {
+    mutationFn: async (app: Omit<AppConfig, "id" | "enabled" | "source"> & { appId: string }) => {
       const res = await fetch("/api/admin/apps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

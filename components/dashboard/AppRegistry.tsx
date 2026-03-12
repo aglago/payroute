@@ -40,7 +40,7 @@ interface AppConfig {
 interface AppRegistryProps {
   apps: AppConfig[]
   onToggleApp?: (appId: string, enabled: boolean) => void
-  onAddApp?: (app: Omit<AppConfig, "id" | "enabled" | "source">) => Promise<{ success: boolean; error?: string; routerSecret?: string }>
+  onAddApp?: (app: Omit<AppConfig, "id" | "enabled" | "source"> & { appId: string }) => Promise<{ success: boolean; error?: string; routerSecret?: string }>
   onDeleteApp?: (appId: string) => Promise<{ success: boolean; error?: string }>
   onRefresh?: () => void
 }
@@ -84,11 +84,13 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
         throw new Error("Add app handler not configured")
       }
 
+      const appId = formData.appId || formData.name.toLowerCase().replace(/[^a-z0-9]/g, "-")
       const result = await onAddApp({
         name: formData.name,
         webhookUrl: formData.webhookUrl,
         prefixes: formData.prefixes.split(",").map((p) => p.trim()).filter(Boolean),
         description: formData.description,
+        appId,
       })
 
       if (result.success) {

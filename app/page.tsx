@@ -137,7 +137,7 @@ function DashboardContent() {
     toggleAppMutation.mutate({ appId, enabled })
   }
 
-  const handleAddApp = async (app: Omit<AppConfig, "id" | "enabled" | "source">) => {
+  const handleAddApp = async (app: Omit<AppConfig, "id" | "enabled" | "source"> & { appId: string }) => {
     return new Promise<{ success: boolean; error?: string; routerSecret?: string }>((resolve) => {
       addAppMutation.mutate(app, {
         onSuccess: (data) => resolve({ success: true, routerSecret: data.app?.routerSecret }),
