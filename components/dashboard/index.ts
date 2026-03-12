@@ -1,4 +1,6 @@
 export { Header } from "./Header"
+export { Sidebar } from "./Sidebar"
+export { DashboardLayout } from "./DashboardLayout"
 export { StatsCards } from "./StatsCards"
 export { AppRegistry } from "./AppRegistry"
 export { RecentWebhooks } from "./RecentWebhooks"
