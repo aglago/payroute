@@ -89,12 +89,15 @@ export async function forwardWebhook(
     })
 
     const durationMs = Date.now() - startTime
+
+    // Read body as text first, then try to parse as JSON
+    const bodyText = await response.text()
     let body: unknown
 
     try {
-      body = await response.json()
+      body = JSON.parse(bodyText)
     } catch {
-      body = await response.text()
+      body = bodyText
     }
 
     return {

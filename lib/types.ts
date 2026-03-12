@@ -48,7 +48,7 @@ export interface WebhookLogEntry {
   payload: unknown
   destination_app?: string
   destination_url?: string
-  routing_strategy?: 'metadata' | 'prefix' | 'none'
+  routing_strategy?: 'metadata' | 'prefix' | 'none' | 'manual'
   reference?: string
   forward_status?: 'success' | 'failed' | 'skipped' | 'dead_letter'
   forward_response_status?: number
