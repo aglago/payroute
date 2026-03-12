@@ -38,12 +38,32 @@ interface Stats {
   byApp: Record<string, number>
 }
 
+interface WebhookLog {
+  id: string
+  reference: string
+  destination_app: string
+  destination_url?: string
+  routing_strategy: "metadata" | "prefix" | "none"
+  forward_status: "success" | "failed" | "dead_letter"
+  forward_response_status?: number
+  processing_time_ms: number
+  created_at: string
+}
+
+interface DeadLetterEntry {
+  id: string
+  reference: string
+  reason: string
+  created_at: string
+  reviewed: boolean
+}
+
 interface DashboardContextType {
   // Data
   stats: Stats
   apps: AppConfig[]
-  webhooks: any[]
-  deadLetters: any[]
+  webhooks: WebhookLog[]
+  deadLetters: DeadLetterEntry[]
 
   // Loading states
   isLoading: boolean

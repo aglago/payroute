@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react"
 
 type Theme = "light" | "dark"
 
@@ -11,19 +11,43 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
+// Store for theme state that works with SSR
+let themeState: Theme = "light"
+const listeners = new Set<() => void>()
+
+function getThemeSnapshot(): Theme {
+  return themeState
+}
+
+function getServerSnapshot(): Theme {
+  return "light"
+}
+
+function subscribeToTheme(callback: () => void): () => void {
+  listeners.add(callback)
+  return () => listeners.delete(callback)
+}
+
+function setThemeState(newTheme: Theme) {
+  themeState = newTheme
+  listeners.forEach((listener) => listener())
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light")
+  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getServerSnapshot)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true)
-    // Check for saved theme preference or system preference
+    // Initialize theme from localStorage on mount
     const savedTheme = localStorage.getItem("payroute-theme") as Theme | null
     if (savedTheme) {
-      setTheme(savedTheme)
+      setThemeState(savedTheme)
     } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      setTheme("dark")
+      setThemeState("dark")
     }
+    // This is intentional for hydration - mount state must be set after client-side initialization
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true)
   }, [])
 
   useEffect(() => {
@@ -39,12 +63,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme, mounted])
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"))
-  }
-
-  // Prevent flash of wrong theme
-  if (!mounted) {
-    return <>{children}</>
+    setThemeState(theme === "light" ? "dark" : "light")
   }
 
   return (
