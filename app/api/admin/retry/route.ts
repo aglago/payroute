@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Log the retry attempt (linked to the original webhook)
-    await WebhookLogger.logAttempt({
+    const attemptResult = await WebhookLogger.logAttempt({
       webhook_log_id: webhookId,
       attempt_number: attemptCount + 1,
       attempt_type: 'retry',
@@ -104,8 +104,12 @@ export async function POST(request: NextRequest) {
       error_message: forwardResult.error,
     })
 
+    if (!attemptResult.success) {
+      console.error('Failed to log retry attempt:', attemptResult.error)
+    }
+
     // Update the original webhook log's forward status and details
-    await WebhookLogger.updateForwardStatus(webhookId, {
+    const updateResult = await WebhookLogger.updateForwardStatus(webhookId, {
       status: forwardResult.success ? 'success' : 'failed',
       destination_app: app.id,
       destination_url: app.webhookUrl,
@@ -114,6 +118,10 @@ export async function POST(request: NextRequest) {
       duration_ms: forwardResult.durationMs,
       error_message: forwardResult.error,
     })
+
+    if (!updateResult.success) {
+      console.error('Failed to update webhook log:', updateResult.error)
+    }
 
     if (forwardResult.success) {
       return NextResponse.json({
