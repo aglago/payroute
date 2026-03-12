@@ -115,8 +115,15 @@ export async function forwardWebhook(
       body = bodyText
     }
 
+    // Check both HTTP status and response body for success
+    // Destination app should return { success: false } if processing failed
+    const httpSuccess = response.ok
+    const bodySuccess = typeof body === 'object' && body !== null && 'success' in body
+      ? (body as { success: boolean }).success !== false
+      : true // If no success field, assume success based on HTTP status
+
     return {
-      success: response.ok,
+      success: httpSuccess && bodySuccess,
       status: response.status,
       body,
       durationMs,
