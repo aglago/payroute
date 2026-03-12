@@ -154,13 +154,16 @@ export async function POST(request: NextRequest) {
         error_message: forwardResult.error,
       })
 
-      // Update the webhook log's forward status
-      await WebhookLogger.updateForwardStatus(
-        logResult.id,
-        forwardResult.success ? 'success' : 'failed',
-        routingResult.app.id,
-        routingResult.app.webhookUrl
-      )
+      // Update the webhook log's forward status and details
+      await WebhookLogger.updateForwardStatus(logResult.id, {
+        status: forwardResult.success ? 'success' : 'failed',
+        destination_app: routingResult.app.id,
+        destination_url: routingResult.app.webhookUrl,
+        response_status: forwardResult.status,
+        response_body: forwardResult.body,
+        duration_ms: forwardResult.durationMs,
+        error_message: forwardResult.error,
+      })
     }
 
     if (forwardResult.success) {

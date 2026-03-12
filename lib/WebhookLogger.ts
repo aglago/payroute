@@ -315,13 +315,19 @@ export class WebhookLogger {
   }
 
   /**
-   * Update the webhook log's forward status based on the latest attempt
+   * Update the webhook log's forward status and details based on the latest attempt
    */
   static async updateForwardStatus(
     webhookLogId: string,
-    status: 'success' | 'failed',
-    destinationApp: string,
-    destinationUrl: string
+    data: {
+      status: 'success' | 'failed'
+      destination_app: string
+      destination_url: string
+      response_status?: number
+      response_body?: unknown
+      duration_ms?: number
+      error_message?: string
+    }
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const supabase = createClient()
@@ -329,9 +335,13 @@ export class WebhookLogger {
       const { error } = await supabase
         .from('webhook_logs')
         .update({
-          forward_status: status,
-          destination_app: destinationApp,
-          destination_url: destinationUrl,
+          forward_status: data.status,
+          destination_app: data.destination_app,
+          destination_url: data.destination_url,
+          forward_response_status: data.response_status || null,
+          forward_response_body: data.response_body || null,
+          forward_duration_ms: data.duration_ms || null,
+          error_message: data.error_message || null,
         })
         .eq('id', webhookLogId)
 

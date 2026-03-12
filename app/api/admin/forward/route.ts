@@ -95,13 +95,16 @@ export async function POST(request: NextRequest) {
       error_message: forwardResult.error,
     })
 
-    // Update the original webhook log's forward status
-    await WebhookLogger.updateForwardStatus(
-      webhookId,
-      forwardResult.success ? 'success' : 'failed',
-      app.id,
-      app.webhookUrl
-    )
+    // Update the original webhook log's forward status and details
+    await WebhookLogger.updateForwardStatus(webhookId, {
+      status: forwardResult.success ? 'success' : 'failed',
+      destination_app: app.id,
+      destination_url: app.webhookUrl,
+      response_status: forwardResult.status,
+      response_body: forwardResult.body,
+      duration_ms: forwardResult.durationMs,
+      error_message: forwardResult.error,
+    })
 
     // If this was a dead letter entry, mark it as resolved
     if (webhookLog.forward_status === 'dead_letter') {
