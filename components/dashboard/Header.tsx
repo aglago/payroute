@@ -1,7 +1,8 @@
 "use client"
 
 import { Badge, Button } from "@/components/ui"
-import { Activity, LogOut } from "lucide-react"
+import { Activity, LogOut, Sun, Moon } from "lucide-react"
+import { useTheme } from "@/components/providers/ThemeProvider"
 
 interface HeaderProps {
   status: "operational" | "degraded" | "down"
@@ -9,6 +10,8 @@ interface HeaderProps {
 }
 
 export function Header({ status, onLogout }: HeaderProps) {
+  const { theme, toggleTheme } = useTheme()
+
   const statusConfig = {
     operational: { label: "Operational", color: "success" as const },
     degraded: { label: "Degraded", color: "warning" as const },
@@ -39,6 +42,9 @@ export function Header({ status, onLogout }: HeaderProps) {
               }`} />
               <Badge variant={config.color}>{config.label}</Badge>
             </div>
+            <Button variant="ghost" size="icon" onClick={toggleTheme} title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>
+              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </Button>
             {onLogout && (
               <Button variant="ghost" size="sm" onClick={onLogout} className="gap-2">
                 <LogOut className="h-4 w-4" />

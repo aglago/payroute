@@ -313,7 +313,7 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
 
       {/* Add App Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent onClose={() => setIsAddDialogOpen(false)}>
+        <DialogContent className="sm:max-w-md">
           {newAppSecret ? (
             <>
               <DialogHeader>
@@ -325,7 +325,7 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
                   Save this router secret - it won&apos;t be shown again.
                 </DialogDescription>
               </DialogHeader>
-              <div className="p-6 space-y-4">
+              <div className="space-y-4">
                 <div>
                   <Label>Router Secret</Label>
                   <div className="flex gap-2 mt-1">
@@ -371,7 +371,7 @@ export function AppRegistry({ apps, onToggleApp, onAddApp, onDeleteApp, onRefres
                   Register a new destination app for webhook routing.
                 </DialogDescription>
               </DialogHeader>
-              <div className="p-6 space-y-4">
+              <div className="space-y-4">
                 {error && (
                   <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
                     <AlertCircle className="h-4 w-4" />

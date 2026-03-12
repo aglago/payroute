@@ -22,6 +22,7 @@ import {
   useToggleApp,
   useAddApp,
   useDeleteApp,
+  useRetryWebhook,
 } from "@/hooks/useDashboard"
 
 // Types
@@ -107,6 +108,7 @@ function DashboardContent() {
   const toggleAppMutation = useToggleApp()
   const addAppMutation = useAddApp()
   const deleteAppMutation = useDeleteApp()
+  const retryWebhookMutation = useRetryWebhook()
 
   // Derived state
   const stats = statsQuery.data ?? {
@@ -160,6 +162,15 @@ function DashboardContent() {
     appsQuery.refetch()
     webhooksQuery.refetch()
     deadLettersQuery.refetch()
+  }
+
+  const handleRetryWebhook = async (webhookId: string) => {
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      retryWebhookMutation.mutate(webhookId, {
+        onSuccess: () => resolve({ success: true }),
+        onError: (error) => resolve({ success: false, error: error.message }),
+      })
+    })
   }
 
   return (
@@ -216,6 +227,7 @@ function DashboardContent() {
               <RecentWebhooks
                 webhooks={webhooks}
                 onRefresh={handleRefresh}
+                onRetry={handleRetryWebhook}
                 isLoading={isLoading}
               />
               <DeadLetterQueue
@@ -239,6 +251,7 @@ function DashboardContent() {
             <RecentWebhooks
               webhooks={webhooks}
               onRefresh={handleRefresh}
+              onRetry={handleRetryWebhook}
               isLoading={isLoading}
             />
           </TabsContent>

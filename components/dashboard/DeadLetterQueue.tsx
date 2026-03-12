@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Button } from "@/components/ui"
 import { AlertTriangle, Eye, RotateCcw, Trash2 } from "lucide-react"
+import { formatDate } from "@/lib/utils"
 
 interface DeadLetterEntry {
   id: string
@@ -26,16 +27,6 @@ export function DeadLetterQueue({
   onRetry,
   onDismiss,
 }: DeadLetterQueueProps) {
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
   return (
     <Card>
       <CardHeader>

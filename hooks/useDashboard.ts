@@ -27,9 +27,17 @@ interface WebhookLog {
   id: string
   reference: string
   destination_app: string
+  destination_url?: string
   routing_strategy: "metadata" | "prefix" | "none"
   forward_status: "success" | "failed" | "dead_letter"
+  forward_response_status?: number
+  forward_response_body?: Record<string, unknown>
   processing_time_ms: number
+  ip_address?: string
+  payload?: Record<string, unknown>
+  headers?: Record<string, string>
+  error_message?: string
+  trace_logs?: Array<{ level: string; message: string; timestamp: string }>
   created_at: string
 }
 
@@ -173,6 +181,26 @@ export function useDeleteApp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apps"] })
+    },
+  })
+}
+
+export function useRetryWebhook() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (webhookId: string) => {
+      const res = await fetch("/api/admin/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookId }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.message || "Failed to retry webhook")
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["webhooks"] })
     },
   })
 }
