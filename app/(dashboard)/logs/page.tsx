@@ -223,11 +223,12 @@ export default function LogsPage() {
 
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">{formatDate(log.created_at)}</p>
-              <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
-                <Clock className="h-3 w-3" />
-                Received
-              </p>
+              {log.processing_time_ms ? (
+                <p className="text-sm font-medium">{log.processing_time_ms}ms</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">—</p>
+              )}
+              <p className="text-xs text-muted-foreground">{formatDate(log.created_at)}</p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>
