@@ -17,6 +17,10 @@ async function checkAuth(request: NextRequest): Promise<boolean> {
 
 /**
  * POST /api/admin/forward - Manually forward a webhook to a specific app
+ *
+ * Supports two modes:
+ * 1. Forward from webhook_logs: { webhookId, appId }
+ * 2. Forward from dead_letter: { payload, appId, deadLetterId }
  */
 export async function POST(request: NextRequest) {
   // Validate admin key or session
@@ -29,27 +33,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { webhookId, appId } = body
+    const { webhookId, appId, payload, deadLetterId } = body
 
-    if (!webhookId || !appId) {
+    if (!appId) {
       return NextResponse.json(
-        { success: false, message: 'Missing webhookId or appId' },
+        { success: false, message: 'Missing appId' },
         { status: 400 }
-      )
-    }
-
-    // Get the original webhook log
-    const supabase = createClient()
-    const { data: webhookLog, error: fetchError } = await supabase
-      .from('webhook_logs')
-      .select('*')
-      .eq('id', webhookId)
-      .single()
-
-    if (fetchError || !webhookLog) {
-      return NextResponse.json(
-        { success: false, message: 'Webhook not found' },
-        { status: 404 }
       )
     }
 
@@ -68,6 +57,66 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: `App "${appId}" is disabled` },
         { status: 400 }
+      )
+    }
+
+    const supabase = createClient()
+
+    // Mode 2: Forward from dead letter (direct payload)
+    if (payload && deadLetterId) {
+      // Forward the webhook
+      const forwardResult = await forwardWebhook(
+        app,
+        payload,
+        null // No original signature for manual forward
+      )
+
+      // Update the dead letter entry
+      await supabase
+        .from('dead_letter_webhooks')
+        .update({
+          reviewed: true,
+          reviewed_at: new Date().toISOString(),
+          resolution: forwardResult.success ? 'forwarded' : 'forward_failed',
+          forwarded_to: appId,
+        })
+        .eq('id', deadLetterId)
+
+      if (forwardResult.success) {
+        return NextResponse.json({
+          success: true,
+          message: `Webhook forwarded to ${app.name}`,
+          status: forwardResult.status,
+          durationMs: forwardResult.durationMs,
+        })
+      } else {
+        return NextResponse.json({
+          success: false,
+          message: forwardResult.error || 'Forward failed',
+          status: forwardResult.status,
+        })
+      }
+    }
+
+    // Mode 1: Forward from webhook_logs
+    if (!webhookId) {
+      return NextResponse.json(
+        { success: false, message: 'Missing webhookId or payload+deadLetterId' },
+        { status: 400 }
+      )
+    }
+
+    // Get the original webhook log
+    const { data: webhookLog, error: fetchError } = await supabase
+      .from('webhook_logs')
+      .select('*')
+      .eq('id', webhookId)
+      .single()
+
+    if (fetchError || !webhookLog) {
+      return NextResponse.json(
+        { success: false, message: 'Webhook not found' },
+        { status: 404 }
       )
     }
 

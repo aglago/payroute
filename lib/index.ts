@@ -53,6 +53,7 @@ export { WebhookLogger } from './WebhookLogger'
 export {
   logToDeadLetter,
   getDeadLetterEntries,
+  getDeadLetterEntry,
   markAsReviewed,
   getUnreviewedCount,
 } from './dead-letter'

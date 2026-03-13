@@ -121,6 +121,35 @@ export async function markAsReviewed(
 }
 
 /**
+ * Get a single dead letter entry by ID
+ */
+export async function getDeadLetterEntry(id: string): Promise<{
+  success: boolean
+  entry?: unknown
+  error?: string
+}> {
+  try {
+    const supabase = createClient()
+
+    const { data, error } = await supabase
+      .from('dead_letter_webhooks')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('Failed to get dead letter entry:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, entry: data }
+  } catch (error) {
+    console.error('Get dead letter entry error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+/**
  * Get count of unreviewed dead letter entries
  */
 export async function getUnreviewedCount(): Promise<number> {

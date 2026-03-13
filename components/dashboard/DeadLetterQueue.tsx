@@ -1,7 +1,8 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge, Button } from "@/components/ui"
-import { AlertTriangle, Eye, RotateCcw, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from "@/components/ui"
+import { AlertTriangle, Eye, CheckCircle2 } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 
 interface DeadLetterEntry {
@@ -10,22 +11,18 @@ interface DeadLetterEntry {
   reason: string
   created_at: string
   reviewed: boolean
+  resolution?: string
+  forwarded_to?: string
 }
 
 interface DeadLetterQueueProps {
   entries: DeadLetterEntry[]
   unreviewedCount: number
-  onReview?: (id: string) => void
-  onRetry?: (id: string) => void
-  onDismiss?: (id: string) => void
 }
 
 export function DeadLetterQueue({
   entries,
   unreviewedCount,
-  onReview,
-  onRetry,
-  onDismiss,
 }: DeadLetterQueueProps) {
   return (
     <Card>
@@ -47,19 +44,27 @@ export function DeadLetterQueue({
       <CardContent>
         <div className="space-y-3">
           {entries.map((entry) => (
-            <div
+            <Link
               key={entry.id}
-              className={`flex items-center justify-between p-3 rounded-lg border ${
+              href={`/dead-letter/${entry.id}`}
+              className={`flex items-center justify-between p-3 rounded-lg border transition-colors hover:bg-muted/50 ${
                 entry.reviewed ? "border-border bg-muted/30" : "border-warning/50 bg-warning/5"
               }`}
             >
               <div className="flex items-center gap-3">
-                <AlertTriangle className={`h-5 w-5 ${entry.reviewed ? "text-muted-foreground" : "text-warning"}`} />
+                {entry.reviewed ? (
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-warning" />
+                )}
                 <div>
                   <div className="flex items-center gap-2">
                     <code className="text-sm font-mono">{entry.reference || "No reference"}</code>
                     {entry.reviewed && (
-                      <Badge variant="secondary" className="text-xs">Reviewed</Badge>
+                      <Badge variant="success" className="text-xs">{entry.resolution || "Reviewed"}</Badge>
+                    )}
+                    {entry.forwarded_to && (
+                      <Badge variant="outline" className="text-xs">→ {entry.forwarded_to}</Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -68,18 +73,10 @@ export function DeadLetterQueue({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={() => onReview?.(entry.id)}>
-                  <Eye className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => onRetry?.(entry.id)}>
-                  <RotateCcw className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => onDismiss?.(entry.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-2 pointer-events-none">
+                <Eye className="h-4 w-4 text-muted-foreground" />
               </div>
-            </div>
+            </Link>
           ))}
 
           {entries.length === 0 && (
