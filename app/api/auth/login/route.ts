@@ -1,10 +1,14 @@
 /**
  * Auth Login API
  * Validates admin key and sets a session cookie
+ *
+ * Uses stateless session tokens (HMAC-signed) that can be validated
+ * on any serverless instance without shared storage.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { createSessionToken } from '@/lib/session'
 
 const SESSION_COOKIE_NAME = 'payroute_session'
 const SESSION_MAX_AGE = 60 * 60 * 24 // 24 hours
@@ -28,12 +32,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create a simple session token (hash of the key + timestamp)
-    const crypto = await import('crypto')
-    const sessionToken = crypto
-      .createHash('sha256')
-      .update(`${expectedKey}-${Date.now()}`)
-      .digest('hex')
+    // Create a stateless session token (HMAC-signed, can be validated anywhere)
+    const sessionToken = createSessionToken(expectedKey)
 
     // Set session cookie
     const cookieStore = await cookies()
@@ -44,11 +44,6 @@ export async function POST(request: NextRequest) {
       maxAge: SESSION_MAX_AGE,
       path: '/',
     })
-
-    // Store session token in memory (for validation)
-    // In production, you'd use Redis or a database
-    globalThis.payrouteSessions = globalThis.payrouteSessions || new Set()
-    globalThis.payrouteSessions.add(sessionToken)
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -63,12 +58,6 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   // Logout - clear session cookie
   const cookieStore = await cookies()
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value
-
-  if (sessionToken && globalThis.payrouteSessions) {
-    globalThis.payrouteSessions.delete(sessionToken)
-  }
-
   cookieStore.delete(SESSION_COOKIE_NAME)
 
   return NextResponse.json({ success: true })

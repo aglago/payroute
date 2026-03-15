@@ -2,9 +2,11 @@
  * Security utilities for PayRoute
  * - Paystack signature verification
  * - IP validation
+ * - Admin authentication
  */
 
 import crypto from 'crypto'
+import { validateSessionToken } from './session'
 
 // Paystack webhook IP whitelist
 // Source: https://paystack.com/docs/payments/webhooks/#ip-whitelisting
@@ -88,10 +90,10 @@ export function validateAdminKey(
 
 /**
  * Validate admin session from cookie
+ * Uses stateless HMAC-signed tokens (works across serverless instances)
  */
 export function validateSession(sessionToken: string | undefined): boolean {
-  if (!sessionToken) return false
-  return globalThis.payrouteSessions?.has(sessionToken) ?? false
+  return validateSessionToken(sessionToken)
 }
 
 /**
@@ -114,8 +116,3 @@ export function isAuthenticated(
   return false
 }
 
-// Declare global type for session storage
-declare global {
-  // eslint-disable-next-line no-var
-  var payrouteSessions: Set<string> | undefined
-}

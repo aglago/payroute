@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { validateSessionToken } from '@/lib/session'
 
 const SESSION_COOKIE_NAME = 'payroute_session'
 
@@ -17,8 +18,8 @@ export async function GET() {
       return NextResponse.json({ authenticated: false })
     }
 
-    // Check if session is valid
-    const isValid = globalThis.payrouteSessions?.has(sessionToken) ?? false
+    // Check if session is valid (stateless validation)
+    const isValid = validateSessionToken(sessionToken)
 
     return NextResponse.json({ authenticated: isValid })
   } catch (error) {
