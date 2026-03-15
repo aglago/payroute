@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import { authFetch } from "@/lib/auth-fetch"
 import {
   Card,
   CardContent,
@@ -89,8 +90,8 @@ export default function DeadLetterDetailPage() {
 
     try {
       const [entryRes, appsRes] = await Promise.all([
-        fetch(`/api/admin/dead-letter/${id}`),
-        fetch("/api/admin/apps"),
+        authFetch(`/api/admin/dead-letter/${id}`),
+        authFetch("/api/admin/apps"),
       ])
 
       const entryData = await entryRes.json()
@@ -130,7 +131,7 @@ export default function DeadLetterDetailPage() {
     try {
       // First, we need to create a webhook log entry from this dead letter
       // Then forward it to the selected app
-      const res = await fetch("/api/admin/forward", {
+      const res = await authFetch("/api/admin/forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -144,7 +145,7 @@ export default function DeadLetterDetailPage() {
 
       if (data.success) {
         // Mark as reviewed with forwarded resolution
-        await fetch(`/api/admin/dead-letter/${id}`, {
+        await authFetch(`/api/admin/dead-letter/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -169,7 +170,7 @@ export default function DeadLetterDetailPage() {
     setReviewResult(null)
 
     try {
-      const res = await fetch(`/api/admin/dead-letter/${id}`, {
+      const res = await authFetch(`/api/admin/dead-letter/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

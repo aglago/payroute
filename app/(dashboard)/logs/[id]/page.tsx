@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import { authFetch } from "@/lib/auth-fetch"
 import {
   Card,
   CardContent,
@@ -137,8 +138,8 @@ export default function WebhookLogDetailPage() {
 
     try {
       const [logRes, appsRes] = await Promise.all([
-        fetch(`/api/admin/logs/${id}`),
-        fetch("/api/admin/apps"),
+        authFetch(`/api/admin/logs/${id}`),
+        authFetch("/api/admin/apps"),
       ])
 
       const logData = await logRes.json()
@@ -177,7 +178,7 @@ export default function WebhookLogDetailPage() {
     setRetryResult(null)
 
     try {
-      const res = await fetch("/api/admin/retry", {
+      const res = await authFetch("/api/admin/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ webhookId: log.id }),
@@ -201,7 +202,7 @@ export default function WebhookLogDetailPage() {
     setForwardResult(null)
 
     try {
-      const res = await fetch("/api/admin/forward", {
+      const res = await authFetch("/api/admin/forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ webhookId: log.id, appId: selectedAppId }),

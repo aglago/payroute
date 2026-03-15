@@ -62,7 +62,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the app configuration
+    // Get the CURRENT app configuration (fresh from database, not from the log)
+    // This ensures we use the updated webhook URL if it was changed
     const appRegistry = await getAppRegistry()
     const app = appRegistry[destinationAppId]
 
@@ -80,10 +81,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Log which URL we're using (helps debug if URL was recently updated)
+    const originalUrl = webhookLog.destination_url
+    const currentUrl = app.webhookUrl
+    if (originalUrl && originalUrl !== currentUrl) {
+      console.log(`[Retry] URL changed: "${originalUrl}" → "${currentUrl}"`)
+    }
+    console.log(`[Retry] Forwarding webhook ${webhookId} to ${currentUrl}`)
+
     // Get the current attempt count for this webhook
     const attemptCount = await WebhookLogger.getAttemptCount(webhookId)
 
-    // Re-forward the webhook
+    // Re-forward the webhook using CURRENT app config (current webhookUrl)
     const forwardResult = await forwardWebhook(
       app,
       webhookLog.payload,

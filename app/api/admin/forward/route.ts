@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the app configuration
+    // Get the CURRENT app configuration (fresh from database)
+    // This ensures we use the updated webhook URL if it was changed
     const appRegistry = await getAppRegistry()
     const app = appRegistry[appId]
 
@@ -60,11 +61,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Log which URL we're using
+    console.log(`[Forward] Forwarding to ${appId} at ${app.webhookUrl}`)
+
     const supabase = createClient()
 
     // Mode 2: Forward from dead letter (direct payload)
     if (payload && deadLetterId) {
-      // Forward the webhook
+      // Forward the webhook using CURRENT app config (current webhookUrl)
       const forwardResult = await forwardWebhook(
         app,
         payload,
