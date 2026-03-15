@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { authFetch } from "@/lib/auth-fetch"
 
 // Types
 interface Stats {
@@ -50,9 +51,9 @@ interface DeadLetterEntry {
   reviewed: boolean
 }
 
-// Fetch functions
+// Fetch functions (use authFetch to handle 401 globally)
 async function fetchStats(): Promise<Stats> {
-  const res = await fetch("/api/admin/stats")
+  const res = await authFetch("/api/admin/stats")
   if (!res.ok) throw new Error("Failed to fetch stats")
   const data = await res.json()
   if (!data.success) throw new Error(data.message || "Failed to fetch stats")
@@ -67,7 +68,7 @@ async function fetchStats(): Promise<Stats> {
 }
 
 async function fetchApps(): Promise<AppConfig[]> {
-  const res = await fetch("/api/admin/apps")
+  const res = await authFetch("/api/admin/apps")
   if (!res.ok) throw new Error("Failed to fetch apps")
   const data = await res.json()
   if (!data.success) throw new Error(data.message || "Failed to fetch apps")
@@ -75,7 +76,7 @@ async function fetchApps(): Promise<AppConfig[]> {
 }
 
 async function fetchWebhooks(): Promise<WebhookLog[]> {
-  const res = await fetch("/api/admin/logs?limit=10")
+  const res = await authFetch("/api/admin/logs?limit=10")
   if (!res.ok) throw new Error("Failed to fetch logs")
   const data = await res.json()
   if (!data.success) throw new Error(data.message || "Failed to fetch logs")
@@ -83,7 +84,7 @@ async function fetchWebhooks(): Promise<WebhookLog[]> {
 }
 
 async function fetchDeadLetters(): Promise<DeadLetterEntry[]> {
-  const res = await fetch("/api/admin/dead-letter?limit=10")
+  const res = await authFetch("/api/admin/dead-letter?limit=10")
   if (!res.ok) throw new Error("Failed to fetch dead letters")
   const data = await res.json()
   if (!data.success) throw new Error(data.message || "Failed to fetch dead letters")
@@ -127,13 +128,13 @@ export function useDeadLetters(enabled: boolean) {
   })
 }
 
-// Mutations
+// Mutations (use authFetch to handle 401 globally)
 export function useToggleApp() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async ({ appId, enabled }: { appId: string; enabled: boolean }) => {
-      const res = await fetch("/api/admin/apps", {
+      const res = await authFetch("/api/admin/apps", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appId, enabled }),
@@ -153,7 +154,7 @@ export function useAddApp() {
 
   return useMutation({
     mutationFn: async (app: Omit<AppConfig, "id" | "enabled" | "source"> & { appId: string }) => {
-      const res = await fetch("/api/admin/apps", {
+      const res = await authFetch("/api/admin/apps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(app),
@@ -173,7 +174,7 @@ export function useDeleteApp() {
 
   return useMutation({
     mutationFn: async (appId: string) => {
-      const res = await fetch(`/api/admin/apps?appId=${encodeURIComponent(appId)}`, {
+      const res = await authFetch(`/api/admin/apps?appId=${encodeURIComponent(appId)}`, {
         method: "DELETE",
       })
       const data = await res.json()
@@ -191,7 +192,7 @@ export function useUpdateApp() {
 
   return useMutation({
     mutationFn: async ({ appId, ...updates }: { appId: string; name?: string; webhookUrl?: string; prefixes?: string[]; description?: string }) => {
-      const res = await fetch("/api/admin/apps", {
+      const res = await authFetch("/api/admin/apps", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appId, ...updates }),
@@ -211,7 +212,7 @@ export function useRetryWebhook() {
 
   return useMutation({
     mutationFn: async (webhookId: string) => {
-      const res = await fetch("/api/admin/retry", {
+      const res = await authFetch("/api/admin/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ webhookId }),
@@ -231,7 +232,7 @@ export function useManualForward() {
 
   return useMutation({
     mutationFn: async ({ webhookId, appId }: { webhookId: string; appId: string }) => {
-      const res = await fetch("/api/admin/forward", {
+      const res = await authFetch("/api/admin/forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ webhookId, appId }),
@@ -298,7 +299,7 @@ export function useLogout() {
 export function useRevealSecret() {
   return useMutation({
     mutationFn: async ({ appId, adminKey }: { appId: string; adminKey: string }) => {
-      const res = await fetch("/api/admin/apps/secret", {
+      const res = await authFetch("/api/admin/apps/secret", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appId, adminKey }),
