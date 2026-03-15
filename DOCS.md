@@ -23,17 +23,12 @@ PayRoute is a **webhook router** for Paystack. It receives payment webhooks from
 
 ## Quick Start
 
-### 1. Installation
+### 1. Clone and Install
 
 ```bash
-# Clone the repository
 git clone <your-repo-url>
 cd payroute
-
-# Install dependencies
 npm install
-
-# Copy environment variables
 cp .env.example .env.local
 ```
 
@@ -50,11 +45,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 PAYSTACK_SECRET_KEY=sk_live_xxxxx
 
 # Admin API key (for dashboard access)
-# Generate using: openssl rand -hex 32
 ADMIN_API_KEY=your-admin-key
 ```
 
-### Generating an Admin API Key
+### 3. Generate Admin API Key
 
 The admin key protects your dashboard and admin APIs. Generate a secure random key:
 
@@ -68,17 +62,17 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Copy the output and set it as your `ADMIN_API_KEY`. You'll use this same key to log into the dashboard.
 
-### 3. Set Up Database
+### 4. Run the Database Migrations
 
-Run the migrations on your Supabase project:
+Run the SQL files in your Supabase project:
 
-```sql
--- Copy contents from:
--- supabase/migrations/001_create_webhook_logs.sql
--- supabase/migrations/002_create_dead_letter_queue.sql
+```
+supabase/migrations/001_create_webhook_logs.sql
+supabase/migrations/002_create_dead_letter_queue.sql
+supabase/migrations/003_create_app_configs.sql
 ```
 
-### 4. Run Locally
+### 5. Start Development Server
 
 ```bash
 npm run dev
@@ -86,15 +80,16 @@ npm run dev
 
 Visit `http://localhost:3000` to see the dashboard.
 
-### 5. Deploy to Vercel
+### 6. Deploy to Vercel
 
 ```bash
 vercel deploy
 ```
 
-### 6. Update Paystack Webhook URL
+### 7. Update Paystack Webhook URL
 
 In your Paystack dashboard, set your webhook URL to:
+
 ```
 https://your-payroute-domain.vercel.app/api/webhook
 ```
@@ -110,12 +105,11 @@ PayRoute uses two strategies to determine where to send a webhook:
 When creating a payment, include the app name in metadata:
 
 ```javascript
-// In your app's payment initialization
 const response = await paystack.transaction.initialize({
   email: "customer@example.com",
   amount: 5000,
   metadata: {
-    app: "iselldata",  // ← PayRoute uses this to route
+    app: "myapp",  // ← PayRoute uses this to route
     orderId: "12345"
   }
 });
@@ -125,14 +119,9 @@ const response = await paystack.transaction.initialize({
 
 If no `metadata.app` is provided, PayRoute checks the payment reference for known prefixes:
 
-| Prefix | Routes To |
-|--------|-----------|
-| `GD`, `AR`, `WT` | iSellData |
-| `RENT-`, `SALE-`, `BP-` | BookPlug |
-
 ```javascript
 // Your app generates references with a prefix
-const reference = `GD${Date.now()}`; // Routes to iSellData
+const reference = `MYAPP-${Date.now()}`;  // Routes to myapp
 ```
 
 ### What If Neither Matches?
@@ -148,28 +137,45 @@ The webhook goes to the **dead letter queue** where you can:
 
 ### POST /api/webhook
 
-The main webhook endpoint. Receives webhooks from Paystack.
+The main webhook endpoint. Receives webhooks from Paystack and routes them to the correct app. Always returns 200 to prevent Paystack retries.
 
-**Headers:**
-- `x-paystack-signature` - HMAC signature from Paystack
-- `Content-Type: application/json`
+**Request Headers:**
+```
+x-paystack-signature: <HMAC-SHA512 signature>
+Content-Type: application/json
+```
+
+**Request Body (from Paystack):**
+```json
+{
+  "event": "charge.success",
+  "data": {
+    "reference": "MYAPP-1234567890",
+    "amount": 50000,
+    "currency": "NGN",
+    "metadata": {
+      "app": "myapp",
+      "orderId": "ORD-123"
+    }
+  }
+}
+```
 
 **Response:**
 ```json
 {
   "success": true,
   "message": "Webhook forwarded",
-  "app": "iselldata"
+  "app": "myapp",
+  "strategy": "metadata"
 }
 ```
-
-> PayRoute always returns 200 to Paystack to prevent retries.
 
 ---
 
 ### GET /api/health
 
-Health check endpoint.
+Health check endpoint. Returns service status and list of registered apps.
 
 **Response:**
 ```json
@@ -180,10 +186,10 @@ Health check endpoint.
   "timestamp": "2024-01-15T10:30:00.000Z",
   "apps": [
     {
-      "id": "iselldata",
-      "name": "iSellData",
+      "id": "myapp",
+      "name": "My App",
       "enabled": true,
-      "prefixes": ["GD", "AR", "WT"]
+      "prefixes": ["MYAPP-", "MA-"]
     }
   ]
 }
@@ -195,11 +201,11 @@ Health check endpoint.
 
 Get routing statistics.
 
-**Headers:**
-- `x-admin-key: your-admin-key`
-
-**Query Parameters:**
-- `days` - Number of days (default: 7)
+**Request:**
+```
+GET /api/admin/stats?days=7
+x-admin-key: your-admin-key
+```
 
 **Response:**
 ```json
@@ -209,8 +215,8 @@ Get routing statistics.
   "stats": {
     "total": 1250,
     "byApp": {
-      "iselldata": 800,
-      "bookplug": 450
+      "myapp": 800,
+      "otherapp": 450
     },
     "byStrategy": {
       "metadata": 1000,
@@ -230,10 +236,13 @@ Get routing statistics.
 
 ### GET /api/admin/logs
 
-Query webhook logs.
+Query webhook logs with filters.
 
-**Headers:**
-- `x-admin-key: your-admin-key`
+**Request:**
+```
+GET /api/admin/logs?app=myapp&status=success&limit=10
+x-admin-key: your-admin-key
+```
 
 **Query Parameters:**
 - `app` - Filter by destination app
@@ -249,9 +258,9 @@ Query webhook logs.
   "count": 10,
   "logs": [
     {
-      "id": "uuid",
-      "reference": "GD1234567890",
-      "destination_app": "iselldata",
+      "id": "uuid-here",
+      "reference": "MYAPP-1234567890",
+      "destination_app": "myapp",
       "routing_strategy": "prefix",
       "forward_status": "success",
       "forward_response_status": 200,
@@ -264,49 +273,285 @@ Query webhook logs.
 
 ---
 
+### GET /api/admin/logs/[id]
+
+Get a specific webhook log by ID.
+
+**Request:**
+```
+GET /api/admin/logs/uuid-here
+x-admin-key: your-admin-key
+```
+
+---
+
 ### DELETE /api/admin/logs
 
 Delete old logs.
 
-**Headers:**
-- `x-admin-key: your-admin-key`
-
-**Query Parameters:**
-- `days` - Delete logs older than X days (default: 30)
-
----
-
-### GET /api/admin/dead-letter
-
-List dead letter entries.
-
-**Headers:**
-- `x-admin-key: your-admin-key`
-
-**Query Parameters:**
-- `reviewed` - Filter by reviewed status (true/false)
-- `limit` - Number of results (default: 50)
-- `offset` - Pagination offset
+**Request:**
+```
+DELETE /api/admin/logs?days=30
+x-admin-key: your-admin-key
+```
 
 ---
 
-### PATCH /api/admin/dead-letter
+### /api/admin/apps
 
-Mark a dead letter entry as reviewed.
+Manage registered apps. Supports GET, POST, PATCH, DELETE.
 
-**Headers:**
-- `x-admin-key: your-admin-key`
-- `Content-Type: application/json`
+**GET - List Apps:**
+```
+GET /api/admin/apps
+x-admin-key: your-admin-key
+```
 
-**Body:**
+**POST - Create App:**
+```
+POST /api/admin/apps
+x-admin-key: your-admin-key
+Content-Type: application/json
+
+{
+  "name": "My App",
+  "webhookUrl": "https://myapp.com/api/webhooks",
+  "prefixes": ["MYAPP-", "MA-"],
+  "description": "My application"
+}
+```
+
+**Response (save the routerSecret!):**
 ```json
 {
-  "id": "uuid",
+  "success": true,
+  "app": {
+    "id": "my-app",
+    "name": "My App",
+    "webhookUrl": "https://myapp.com/api/webhooks",
+    "prefixes": ["MYAPP-", "MA-"],
+    "enabled": true,
+    "source": "database"
+  },
+  "routerSecret": "a1b2c3d4e5f6..."
+}
+```
+
+> **Important:** The `routerSecret` is only shown once. Save it immediately!
+
+**PATCH - Toggle App:**
+```
+PATCH /api/admin/apps
+x-admin-key: your-admin-key
+Content-Type: application/json
+
+{
+  "appId": "my-app",
+  "enabled": false
+}
+```
+
+**DELETE - Remove App:**
+```
+DELETE /api/admin/apps?appId=my-app
+x-admin-key: your-admin-key
+```
+
+---
+
+### POST /api/admin/apps/secret
+
+Regenerate the router secret for an app.
+
+**Request:**
+```
+POST /api/admin/apps/secret
+x-admin-key: your-admin-key
+Content-Type: application/json
+
+{
+  "appId": "my-app"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "routerSecret": "new-secret-here..."
+}
+```
+
+---
+
+### /api/admin/dead-letter
+
+List and manage dead letter entries (unroutable webhooks).
+
+**GET - List Entries:**
+```
+GET /api/admin/dead-letter?reviewed=false&limit=50
+x-admin-key: your-admin-key
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 2,
+  "entries": [
+    {
+      "id": "uuid-here",
+      "reference": "UNKNOWN-123",
+      "reason": "No matching app found",
+      "reviewed": false,
+      "created_at": "2024-01-15T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+**PATCH - Mark as Reviewed:**
+```
+PATCH /api/admin/dead-letter
+x-admin-key: your-admin-key
+Content-Type: application/json
+
+{
+  "id": "uuid-here",
   "reviewedBy": "admin@example.com",
   "resolution": "forwarded",
-  "resolutionNotes": "Manually forwarded to iSellData",
-  "forwardedTo": "iselldata"
+  "resolutionNotes": "Manually forwarded to myapp"
 }
+```
+
+---
+
+### POST /api/admin/forward
+
+Manually forward a dead letter webhook to an app.
+
+**Request:**
+```
+POST /api/admin/forward
+x-admin-key: your-admin-key
+Content-Type: application/json
+
+{
+  "deadLetterId": "uuid-here",
+  "targetAppId": "myapp"
+}
+```
+
+---
+
+### POST /api/admin/retry
+
+Retry a failed webhook.
+
+**Request:**
+```
+POST /api/admin/retry
+x-admin-key: your-admin-key
+Content-Type: application/json
+
+{
+  "logId": "uuid-here"
+}
+```
+
+---
+
+## Receiving Webhooks in Your App
+
+### How X-PayRoute-Signature Works
+
+1. When you add an app in PayRoute, a **unique secret is auto-generated**
+2. This secret is shown to you **only once** - save it immediately
+3. Configure your app with this secret (e.g., `PAYROUTE_SECRET`)
+4. PayRoute signs each request body using HMAC-SHA512 with your secret
+5. Your app verifies the `X-PayRoute-Signature` header
+
+### Headers Included in Forwarded Webhooks
+
+| Header | Description |
+|--------|-------------|
+| `X-PayRoute-Signature` | HMAC-SHA512 signature of the body using your secret (verify this!) |
+| `X-Original-Signature` | Original Paystack signature |
+| `X-Routed-By` | Always "payroute" |
+| `X-Routed-At` | ISO timestamp of routing |
+
+### Example Handler (Next.js)
+
+```typescript
+// app/api/webhooks/paystack/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+
+function verifyPayRouteSignature(body: string, signature: string): boolean {
+  const secret = process.env.PAYROUTE_SECRET;
+  if (!secret) return false;
+  const hash = crypto.createHmac("sha512", secret).update(body).digest("hex");
+  return hash === signature;
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+
+  // Step 1: Verify the request is from PayRoute (HMAC signature)
+  const signature = request.headers.get("x-payroute-signature");
+  if (!signature || !verifyPayRouteSignature(body, signature)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Step 2: Parse the webhook payload
+  const payload = JSON.parse(body);
+  const { event, data } = payload;
+
+  // Step 3: Handle different event types
+  switch (event) {
+    case "charge.success":
+      await handleSuccessfulPayment(data);
+      break;
+    case "charge.failed":
+      await handleFailedPayment(data);
+      break;
+  }
+
+  return NextResponse.json({ success: true });
+}
+```
+
+### Example Handler (Express.js)
+
+```javascript
+// routes/webhooks.js
+const crypto = require("crypto");
+
+function verifyPayRouteSignature(body, signature) {
+  const secret = process.env.PAYROUTE_SECRET;
+  if (!secret) return false;
+  const hash = crypto.createHmac("sha512", secret).update(body).digest("hex");
+  return hash === signature;
+}
+
+// Use express.raw() middleware for this route
+app.post("/api/webhooks/paystack", express.raw({ type: "*/*" }), (req, res) => {
+  const body = req.body.toString();
+  const signature = req.headers["x-payroute-signature"];
+
+  if (!signature || !verifyPayRouteSignature(body, signature)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { event, data } = JSON.parse(body);
+
+  if (event === "charge.success") {
+    // Process successful payment
+  }
+
+  res.json({ success: true });
+});
 ```
 
 ---
@@ -323,7 +568,7 @@ Mark a dead letter entry as reviewed.
    - **Prefixes**: Comma-separated reference prefixes (optional)
 4. Click **Create App**
 5. **Important**: Copy the generated `routerSecret` - it's shown only once!
-6. Configure your app with this secret
+6. Configure your app with this secret as `PAYROUTE_SECRET`
 
 ### Via API
 
@@ -348,117 +593,20 @@ Response includes the auto-generated `routerSecret`:
 }
 ```
 
-### Via Environment Variables (for static configs)
-
-1. Add environment variables:
-
-```env
-MYAPP_WEBHOOK_URL=https://myapp.com/api/webhooks/paystack
-MYAPP_ROUTER_SECRET=your-secure-secret
-```
-
-2. Update `lib/config.ts`:
-
-```typescript
-export function getAppRegistry(): Record<string, AppConfig> {
-  return {
-    myapp: {
-      id: 'myapp',
-      name: 'My App',
-      webhookUrl: process.env.MYAPP_WEBHOOK_URL || '',
-      routerSecret: process.env.MYAPP_ROUTER_SECRET || '',
-      prefixes: ['MYAPP-', 'MA-'],
-      enabled: !!process.env.MYAPP_WEBHOOK_URL,
-    },
-  }
-}
-```
-
-3. Deploy the changes.
-
----
-
-## Receiving Webhooks in Your App
-
-### How X-Router-Secret Works
-
-1. **Auto-generated**: When you add an app in PayRoute (via dashboard or API), a unique secret is automatically generated
-2. **Shown once**: This secret is displayed only once when the app is created - save it immediately!
-3. **Configure your app**: Store this secret in your app's environment (e.g., `PAYROUTE_SECRET`)
-4. **Verify on receive**: When webhooks arrive, verify the `X-Router-Secret` header matches your stored secret
-
-### Headers Included in Forwarded Webhooks
-
-| Header | Description |
-|--------|-------------|
-| `X-Router-Secret` | Auto-generated secret for your app (verify this!) |
-| `X-Original-Signature` | Original Paystack signature |
-| `X-Routed-By` | Always `payroute` |
-| `X-Routed-At` | ISO timestamp of routing |
-
-### Example Handler (Next.js)
-
-```typescript
-// app/api/webhooks/paystack/route.ts
-import { NextRequest, NextResponse } from "next/server";
-
-export async function POST(request: NextRequest) {
-  // Step 1: Verify the request is from PayRoute
-  const routerSecret = request.headers.get("x-router-secret");
-  if (routerSecret !== process.env.PAYROUTE_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Step 2: Parse the webhook payload
-  const payload = await request.json();
-  const { event, data } = payload;
-
-  // Step 3: Handle different event types
-  switch (event) {
-    case "charge.success":
-      await handleSuccessfulPayment(data);
-      break;
-    case "charge.failed":
-      await handleFailedPayment(data);
-      break;
-  }
-
-  return NextResponse.json({ success: true });
-}
-```
-
-### Example Handler (Express.js)
-
-```javascript
-app.post("/api/webhooks/paystack", (req, res) => {
-  // Verify PayRoute secret
-  const routerSecret = req.headers["x-router-secret"];
-  if (routerSecret !== process.env.PAYROUTE_SECRET) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const { event, data } = req.body;
-
-  if (event === "charge.success") {
-    // Process successful payment
-  }
-
-  res.json({ success: true });
-});
-```
-
 ---
 
 ## Security
 
 ### Signature Verification
 
-PayRoute verifies the Paystack signature before routing:
+PayRoute uses HMAC-SHA512 signatures at every step:
 
 1. Paystack signs the request with your secret key
 2. PayRoute verifies using `PAYSTACK_SECRET_KEY`
-3. If valid, the webhook is routed
-4. Your app receives `X-Router-Secret` to verify the forward
+3. PayRoute re-signs the body with your app's `routerSecret`
+4. Your app verifies `X-PayRoute-Signature` using the same HMAC algorithm
+
+This ensures the secret is never transmitted - only the signature is sent.
 
 ### IP Validation (Optional)
 
@@ -519,6 +667,65 @@ Stores unroutable webhooks.
 | `resolution` | VARCHAR | How it was resolved |
 | `created_at` | TIMESTAMPTZ | When received |
 
+### app_configs
+
+Stores registered apps (database-managed).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | VARCHAR | App ID (slug) |
+| `name` | VARCHAR | Display name |
+| `webhook_url` | VARCHAR | Destination URL |
+| `router_secret` | VARCHAR | HMAC signing secret |
+| `prefixes` | TEXT[] | Reference prefixes |
+| `enabled` | BOOLEAN | Is app active? |
+| `description` | VARCHAR | Optional description |
+| `created_at` | TIMESTAMPTZ | When created |
+| `updated_at` | TIMESTAMPTZ | Last updated |
+
+---
+
+## Project Structure
+
+```
+payroute/
+├── app/
+│   ├── (dashboard)/          # Dashboard pages
+│   │   ├── page.tsx          # Main dashboard
+│   │   ├── apps/             # App management
+│   │   ├── logs/             # Webhook logs
+│   │   ├── dead-letter/      # Dead letter queue
+│   │   └── docs/             # Documentation
+│   └── api/
+│       ├── webhook/          # Main webhook endpoint
+│       ├── health/           # Health check
+│       ├── auth/             # Authentication
+│       └── admin/            # Admin APIs
+│           ├── apps/         # App management
+│           ├── logs/         # Log queries
+│           ├── stats/        # Statistics
+│           ├── dead-letter/  # Dead letter management
+│           ├── forward/      # Manual forwarding
+│           └── retry/        # Retry failed webhooks
+├── components/
+│   ├── ui/                   # Reusable UI components
+│   ├── dashboard/            # Dashboard components
+│   └── providers/            # Context providers
+├── lib/
+│   ├── config.ts             # App registry configuration
+│   ├── router.ts             # Routing logic
+│   ├── security.ts           # Signature verification
+│   ├── WebhookLogger.ts      # Database logging
+│   ├── TraceLogger.ts        # Request tracing
+│   ├── dead-letter.ts        # Dead letter queue
+│   ├── app-store.ts          # App CRUD operations
+│   ├── supabase.ts           # Database client
+│   ├── types.ts              # TypeScript types
+│   └── utils.ts              # Utility functions
+└── supabase/
+    └── migrations/           # Database schema
+```
+
 ---
 
 ## Troubleshooting
@@ -535,36 +742,17 @@ Stores unroutable webhooks.
 2. Verify the destination app is running
 3. Check the logs for the error message
 
+### Signature Verification Failing
+
+1. Ensure you saved the `routerSecret` when creating the app
+2. Verify you're using HMAC-SHA512 (not SHA256)
+3. Make sure you're hashing the raw body string, not parsed JSON
+
 ### Dashboard Shows No Data
 
 1. Ensure `ADMIN_API_KEY` is set
 2. Check Supabase connection
 3. Verify the database tables exist
-
----
-
-## Project Structure
-
-```
-payroute/
-├── app/
-│   ├── page.tsx              # Dashboard
-│   └── api/
-│       ├── webhook/          # Main webhook endpoint
-│       ├── health/           # Health check
-│       └── admin/            # Admin APIs
-├── components/
-│   ├── ui/                   # Reusable UI components
-│   └── dashboard/            # Dashboard components
-├── lib/
-│   ├── config.ts             # App registry
-│   ├── router.ts             # Routing logic
-│   ├── security.ts           # Signature verification
-│   ├── WebhookLogger.ts      # Database logging
-│   └── dead-letter.ts        # Dead letter queue
-└── supabase/
-    └── migrations/           # Database schema
-```
 
 ---
 
