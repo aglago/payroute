@@ -115,8 +115,9 @@ cp .env.example .env.local`} />
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Paystack secret for signature verification
+# Paystack secrets for signature verification
 PAYSTACK_SECRET_KEY=sk_live_xxxxx
+PAYSTACK_TEST_SECRET_KEY=sk_test_xxxxx  # For test webhooks
 
 # Admin API key (for dashboard access)
 ADMIN_API_KEY=your-admin-key`} />
@@ -616,6 +617,93 @@ app.post("/api/webhooks/paystack", express.raw({ type: "*/*" }), (req, res) => {
             </p>
             <CodeBlock code={`curl -H "x-admin-key: your-admin-key" \\
   https://your-payroute.vercel.app/api/admin/stats`} />
+          </div>
+        </div>
+      </Section>
+
+      {/* Test Mode */}
+      <Section title="Test Mode Support">
+        <div className="space-y-4">
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+            <h4 className="font-medium text-primary mb-2">How Test Mode Works</h4>
+            <p className="text-sm text-muted-foreground">
+              PayRoute automatically detects test vs live webhooks using Paystack&apos;s{" "}
+              <code className="bg-muted px-1 rounded">domain</code> field and verifies with the appropriate secret key.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-2">1. Configure Test Secret Key</h4>
+            <p className="text-sm text-muted-foreground mb-2">
+              Add your Paystack test secret key to PayRoute&apos;s environment:
+            </p>
+            <CodeBlock code={`# Live key (already configured)
+PAYSTACK_SECRET_KEY=sk_live_xxxxx
+
+# Test key (add this)
+PAYSTACK_TEST_SECRET_KEY=sk_test_xxxxx`} />
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-2">2. Use Test Keys in Your App</h4>
+            <p className="text-sm text-muted-foreground mb-2">
+              When testing your app, use Paystack test keys:
+            </p>
+            <CodeBlock language="javascript" code={`// Your app's .env (for testing)
+PAYSTACK_PUBLIC_KEY=pk_test_xxxxx
+PAYSTACK_SECRET_KEY=sk_test_xxxxx`} />
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-2">3. How Routing Works</h4>
+            <p className="text-sm text-muted-foreground mb-2">
+              Paystack includes a <code className="bg-muted px-1 rounded">domain</code> field in webhook payloads:
+            </p>
+            <CodeBlock code={`{
+  "event": "charge.success",
+  "data": {
+    "domain": "test",  // or "live"
+    "reference": "MYAPP-123",
+    ...
+  }
+}`} />
+            <ul className="text-sm text-muted-foreground mt-2 list-disc list-inside space-y-1">
+              <li><code className="bg-muted px-1 rounded">domain: &quot;test&quot;</code> → verified with <code className="bg-muted px-1 rounded">PAYSTACK_TEST_SECRET_KEY</code></li>
+              <li><code className="bg-muted px-1 rounded">domain: &quot;live&quot;</code> → verified with <code className="bg-muted px-1 rounded">PAYSTACK_SECRET_KEY</code></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-2">4. Filtering Test Webhooks</h4>
+            <p className="text-sm text-muted-foreground mb-2">
+              All webhooks are logged with an <code className="bg-muted px-1 rounded">is_test</code> flag.
+              You can filter logs in the dashboard or via API:
+            </p>
+            <CodeBlock code={`GET /api/admin/logs?is_test=true
+x-admin-key: your-admin-key`} />
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-2">5. Handling Test Mode in Your App</h4>
+            <p className="text-sm text-muted-foreground mb-2">
+              Your app receives webhooks the same way. Optionally check the domain field:
+            </p>
+            <CodeBlock language="typescript" code={`export async function POST(request: NextRequest) {
+  const body = await request.text();
+  const payload = JSON.parse(body);
+
+  // Check if this is a test webhook
+  const isTest = payload.data?.domain === "test";
+
+  if (isTest) {
+    console.log("Test webhook received - skipping SMS/email");
+    // Process without side effects
+  } else {
+    // Production - send real notifications
+  }
+
+  return NextResponse.json({ success: true });
+}`} />
           </div>
         </div>
       </Section>
