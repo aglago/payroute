@@ -12,7 +12,7 @@ import {
   getClientIP,
   isPaystackIP,
   isIPValidationEnabled,
-  getPaystackSecretKey,
+  getPaystackSecretKeyForMode,
   determineDestinationApp,
   forwardWebhook,
   logToDeadLetter,
@@ -45,11 +45,20 @@ export async function POST(request: NextRequest) {
 
     // Extract signature
     const signature = request.headers.get('x-paystack-signature')
-    const secretKey = getPaystackSecretKey()
 
-    // Verify Paystack signature
+    // Detect test mode from payload domain field
+    // Paystack sends domain: "test" for test mode, domain: "live" for live mode
+    const typedPayloadForDomain = payload as { data?: { domain?: string } }
+    const isTestMode = typedPayloadForDomain.data?.domain === 'test'
+    const secretKey = getPaystackSecretKeyForMode(isTestMode)
+
+    if (isTestMode) {
+      console.log('🧪 Test mode webhook detected')
+    }
+
+    // Verify Paystack signature with appropriate key
     if (!verifyPaystackSignature(rawBody, signature, secretKey)) {
-      console.error('Invalid Paystack signature', { clientIP })
+      console.error('Invalid Paystack signature', { clientIP, isTestMode })
 
       tracer.stop()
       await WebhookLogger.log({
@@ -57,10 +66,11 @@ export async function POST(request: NextRequest) {
         endpoint: '/api/webhook',
         payload,
         ip_address: clientIP,
-        error_message: 'Invalid signature',
+        error_message: `Invalid signature (${isTestMode ? 'test' : 'live'} mode)`,
         forward_status: 'failed',
         processing_time_ms: Date.now() - startTime,
         trace_logs: tracer.getLogs(),
+        is_test: isTestMode,
       })
 
       // Return 200 to Paystack to prevent retries on invalid signatures
@@ -79,7 +89,7 @@ export async function POST(request: NextRequest) {
     // Log incoming webhook
     const eventType = typedPayload.event || 'unknown'
     const reference = typedPayload.data?.reference || 'unknown'
-    console.log(`📥 Webhook received:`, { event: eventType, reference, ip: clientIP })
+    console.log(`📥 Webhook received:`, { event: eventType, reference, ip: clientIP, test: isTestMode })
 
     // Determine destination app
     const routingResult = await determineDestinationApp(typedPayload)
@@ -112,6 +122,7 @@ export async function POST(request: NextRequest) {
         ip_address: clientIP,
         processing_time_ms: Date.now() - startTime,
         trace_logs: tracer.getLogs(),
+        is_test: isTestMode,
       })
 
       // Return 200 to Paystack to acknowledge receipt
@@ -134,6 +145,7 @@ export async function POST(request: NextRequest) {
       ip_address: clientIP,
       processing_time_ms: processingTime,
       trace_logs: tracer.getLogs(),
+      is_test: isTestMode,
     })
 
     // Forward to destination app

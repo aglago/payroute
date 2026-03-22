@@ -100,10 +100,24 @@ export function getEnabledAppsSync(): AppConfig[] {
 }
 
 /**
- * Get the shared Paystack secret key
+ * Get the shared Paystack secret key (live mode)
  */
 export function getPaystackSecretKey(): string {
   return process.env.PAYSTACK_SECRET_KEY || ''
+}
+
+/**
+ * Get the Paystack test secret key
+ */
+export function getPaystackTestSecretKey(): string {
+  return process.env.PAYSTACK_TEST_SECRET_KEY || ''
+}
+
+/**
+ * Get the appropriate Paystack secret key based on mode
+ */
+export function getPaystackSecretKeyForMode(isTest: boolean): string {
+  return isTest ? getPaystackTestSecretKey() : getPaystackSecretKey()
 }
 
 /**

@@ -18,6 +18,7 @@ export interface PaystackWebhookPayload {
     amount: number
     currency: string
     status: string
+    domain?: 'test' | 'live'
     metadata?: {
       app?: string
       [key: string]: unknown
@@ -58,6 +59,7 @@ export interface WebhookLogEntry {
   ip_address?: string
   error_message?: string
   trace_logs?: TraceLogEntry[]
+  is_test?: boolean
 }
 
 export interface TraceLogEntry {

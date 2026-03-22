@@ -14,6 +14,8 @@ export {
   getAppRegistrySync,
   getEnabledAppsSync,
   getPaystackSecretKey,
+  getPaystackTestSecretKey,
+  getPaystackSecretKeyForMode,
   isIPValidationEnabled,
 } from './config'
 

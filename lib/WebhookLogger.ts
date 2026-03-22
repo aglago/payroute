@@ -31,6 +31,7 @@ export class WebhookLogger {
         ip_address: data.ip_address || null,
         error_message: data.error_message || null,
         trace_logs: data.trace_logs || [],
+        is_test: data.is_test || false,
       }
 
       const { data: result, error } = await supabase
@@ -59,6 +60,7 @@ export class WebhookLogger {
     forward_status?: string
     reference?: string
     source?: string
+    is_test?: boolean
     limit?: number
     offset?: number
   } = {}): Promise<unknown[]> {
@@ -84,6 +86,10 @@ export class WebhookLogger {
 
       if (options.source) {
         query = query.eq('source', options.source)
+      }
+
+      if (options.is_test !== undefined) {
+        query = query.eq('is_test', options.is_test)
       }
 
       if (options.limit) {
