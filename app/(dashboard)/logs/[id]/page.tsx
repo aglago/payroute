@@ -27,7 +27,6 @@ import {
   Check,
   RotateCcw,
   Send,
-  Clock,
   Server,
   Globe,
   AlertCircle,
@@ -131,6 +130,7 @@ export default function WebhookLogDetailPage() {
   const [forwarding, setForwarding] = useState(false)
   const [forwardResult, setForwardResult] = useState<{ success: boolean; error?: string } | null>(null)
   const [selectedAppId, setSelectedAppId] = useState("")
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null)
 
   const fetchData = async () => {
     setIsLoading(true)
@@ -166,6 +166,17 @@ export default function WebhookLogDetailPage() {
     }
   }, [id])
 
+  // Default to the last attempt when attempts are loaded or updated
+  useEffect(() => {
+    if (attempts.length > 0) {
+      // Always update to the latest attempt when attempts change
+      const latestAttempt = attempts[attempts.length - 1]
+      if (!selectedAttemptId || !attempts.find(a => a.id === selectedAttemptId)) {
+        setSelectedAttemptId(latestAttempt.id)
+      }
+    }
+  }, [attempts, selectedAttemptId])
+
   const handleCopy = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text)
     setCopied(key)
@@ -185,8 +196,9 @@ export default function WebhookLogDetailPage() {
       })
       const data = await res.json()
       setRetryResult({ success: data.success, error: data.message })
-      // Refresh data to show new attempt
+      // Refresh data to show new attempt and select it
       if (data.success) {
+        setSelectedAttemptId(null) // Reset so useEffect selects the new latest
         fetchData()
       }
     } catch (err) {
@@ -209,8 +221,9 @@ export default function WebhookLogDetailPage() {
       })
       const data = await res.json()
       setForwardResult({ success: data.success, error: data.message })
-      // Refresh data to show new attempt
+      // Refresh data to show new attempt and select it
       if (data.success) {
+        setSelectedAttemptId(null) // Reset so useEffect selects the new latest
         fetchData()
       }
     } catch (err) {
@@ -275,6 +288,34 @@ export default function WebhookLogDetailPage() {
   }
 
   const eventType = (log.payload as Record<string, unknown>)?.event as string || "Unknown"
+
+  // Get the selected attempt for the Outgoing tab
+  const selectedAttempt = attempts.find(a => a.id === selectedAttemptId)
+
+  // Derive outgoing display data - prefer selected attempt over log data
+  const outgoingData = selectedAttempt ? {
+    destination_app: selectedAttempt.destination_app,
+    destination_url: selectedAttempt.destination_url,
+    forward_duration_ms: selectedAttempt.duration_ms,
+    forward_status: selectedAttempt.status === "success" ? "success" : "failed" as const,
+    forward_response_status: selectedAttempt.response_status,
+    forward_response_body: selectedAttempt.response_body,
+    error_message: selectedAttempt.error_message,
+    attempt_number: selectedAttempt.attempt_number,
+    attempt_type: selectedAttempt.attempt_type,
+    created_at: selectedAttempt.created_at,
+  } : {
+    destination_app: log.destination_app,
+    destination_url: log.destination_url,
+    forward_duration_ms: log.forward_duration_ms,
+    forward_status: log.forward_status,
+    forward_response_status: log.forward_response_status,
+    forward_response_body: log.forward_response_body,
+    error_message: log.error_message,
+    attempt_number: null,
+    attempt_type: null,
+    created_at: log.created_at,
+  }
 
   return (
     <div className="space-y-6">
@@ -550,7 +591,7 @@ export default function WebhookLogDetailPage() {
                       className={`relative pl-8 pb-6 ${index < attempts.length - 1 ? "border-l-2 border-border ml-3" : "ml-3"}`}
                     >
                       {/* Timeline dot */}
-                      <div className={`absolute -left-[9px] top-0 w-5 h-5 rounded-full flex items-center justify-center ${
+                      <div className={`absolute -left-2.25 top-0 w-5 h-5 rounded-full flex items-center justify-center ${
                         attempt.status === "success" ? "bg-success" : "bg-destructive"
                       }`}>
                         {attempt.status === "success" ? (
@@ -641,36 +682,60 @@ export default function WebhookLogDetailPage() {
         <TabsContent value="outgoing">
           <Card>
             <CardHeader className={`border-b border-border ${
-              log.forward_status === "success" ? "bg-success/5" :
-              log.forward_status === "failed" ? "bg-destructive/5" :
+              outgoingData.forward_status === "success" ? "bg-success/5" :
+              outgoingData.forward_status === "failed" ? "bg-destructive/5" :
               "bg-warning/5"
             }`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  log.forward_status === "success" ? "bg-success/10" :
-                  log.forward_status === "failed" ? "bg-destructive/10" :
-                  "bg-warning/10"
-                }`}>
-                  <ArrowUpRight className={`h-5 w-5 ${
-                    log.forward_status === "success" ? "text-success" :
-                    log.forward_status === "failed" ? "text-destructive" :
-                    "text-warning"
-                  }`} />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    outgoingData.forward_status === "success" ? "bg-success/10" :
+                    outgoingData.forward_status === "failed" ? "bg-destructive/10" :
+                    "bg-warning/10"
+                  }`}>
+                    <ArrowUpRight className={`h-5 w-5 ${
+                      outgoingData.forward_status === "success" ? "text-success" :
+                      outgoingData.forward_status === "failed" ? "text-destructive" :
+                      "text-warning"
+                    }`} />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Forwarded to Destination</CardTitle>
+                    <CardDescription>
+                      {selectedAttempt
+                        ? `Attempt #${selectedAttempt.attempt_number} (${selectedAttempt.attempt_type}) - ${formatDate(selectedAttempt.created_at)}`
+                        : "What PayRoute sent to your app"
+                      }
+                    </CardDescription>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-lg">Forwarded to Destination</CardTitle>
-                  <CardDescription>What PayRoute sent to your app</CardDescription>
-                </div>
+                {/* Attempt Selector */}
+                {attempts.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">View attempt:</Label>
+                    <select
+                      className="p-2 text-sm rounded-md border border-input bg-background min-w-[180px]"
+                      value={selectedAttemptId || ""}
+                      onChange={(e) => setSelectedAttemptId(e.target.value)}
+                    >
+                      {attempts.map((attempt) => (
+                        <option key={attempt.id} value={attempt.id}>
+                          #{attempt.attempt_number} - {attempt.attempt_type} ({attempt.status === "success" ? "✓" : "✗"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
-              {log.destination_app ? (
+              {outgoingData.destination_app ? (
                 <>
                   {/* Request Info */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                     <div>
                       <Label className="text-xs text-muted-foreground">Destination App</Label>
-                      <p className="font-medium">{log.destination_app}</p>
+                      <p className="font-medium">{outgoingData.destination_app}</p>
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Method</Label>
@@ -678,11 +743,15 @@ export default function WebhookLogDetailPage() {
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Duration</Label>
-                      <p className="font-medium">{log.forward_duration_ms || "—"}ms</p>
+                      <p className="font-medium">{outgoingData.forward_duration_ms || "—"}ms</p>
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Routing</Label>
-                      <p className="font-medium">{log.routing_strategy}</p>
+                      <Label className="text-xs text-muted-foreground">
+                        {selectedAttempt ? "Attempt Type" : "Routing"}
+                      </Label>
+                      <p className="font-medium">
+                        {selectedAttempt ? outgoingData.attempt_type : log.routing_strategy}
+                      </p>
                     </div>
                   </div>
 
@@ -691,11 +760,11 @@ export default function WebhookLogDetailPage() {
                     <Label className="text-sm font-medium">Destination URL</Label>
                     <div className="flex items-center gap-2 mt-2">
                       <code className="flex-1 p-3 bg-muted rounded-lg text-sm font-mono break-all">
-                        {log.destination_url || "Unknown"}
+                        {outgoingData.destination_url || "Unknown"}
                       </code>
-                      {log.destination_url && (
+                      {outgoingData.destination_url && (
                         <a
-                          href={log.destination_url}
+                          href={outgoingData.destination_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 hover:bg-muted rounded"
@@ -716,7 +785,7 @@ export default function WebhookLogDetailPage() {
                           "X-PayRoute-Signature": "••••••••",
                           "X-Original-Signature": "••••••••",
                           "X-Routed-By": "payroute",
-                          "X-Routed-At": log.created_at,
+                          "X-Routed-At": outgoingData.created_at,
                         },
                         null,
                         2
@@ -752,28 +821,28 @@ export default function WebhookLogDetailPage() {
                         <Label className="text-sm font-medium">Response from Destination</Label>
                         <p className="text-xs text-muted-foreground">What your app returned</p>
                       </div>
-                      {log.forward_response_status && getHttpStatusBadge(log.forward_response_status)}
+                      {outgoingData.forward_response_status && getHttpStatusBadge(outgoingData.forward_response_status)}
                     </div>
 
-                    {log.error_message && (
+                    {outgoingData.error_message && (
                       <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                         <div className="flex items-center gap-2 text-destructive mb-1">
                           <XCircle className="h-4 w-4" />
                           <span className="font-medium">Error</span>
                         </div>
-                        <p className="text-sm text-destructive">{log.error_message}</p>
+                        <p className="text-sm text-destructive">{outgoingData.error_message}</p>
                       </div>
                     )}
 
-                    {log.forward_response_body ? (
-                      <ResponseBody body={log.forward_response_body} />
+                    {outgoingData.forward_response_body ? (
+                      <ResponseBody body={outgoingData.forward_response_body} />
                     ) : (
                       <p className="text-sm text-muted-foreground italic">No response body recorded</p>
                     )}
                   </div>
 
                   {/* Retry Button */}
-                  {(log.forward_status === "failed") && (
+                  {(outgoingData.forward_status === "failed") && (
                     <div className="border-t pt-6">
                       {retryResult && (
                         <div className={`mb-4 p-3 rounded-lg text-sm ${retryResult.success ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
