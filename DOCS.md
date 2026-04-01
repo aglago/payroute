@@ -554,6 +554,77 @@ app.post("/api/webhooks/paystack", express.raw({ type: "*/*" }), (req, res) => {
 });
 ```
 
+### Response Handling
+
+PayRoute checks **both** your HTTP status code and response body to determine if the forward was successful:
+
+| Condition | Result in PayRoute |
+|-----------|-------------------|
+| HTTP 2xx + no `success` field | **Success** |
+| HTTP 2xx + `{ success: true }` | **Success** |
+| HTTP 2xx + `{ success: false }` | **Failed** |
+| HTTP 4xx/5xx | **Failed** |
+
+**Why this matters:** If your app receives the webhook but fails to process it (e.g., database error), return `{ success: false }` so PayRoute marks it as failed. This allows you to retry from the dashboard later.
+
+```typescript
+// Signal success
+return NextResponse.json({ success: true });
+
+// Signal failure (will show as failed in PayRoute, can be retried)
+return NextResponse.json({ success: false, error: "Database unavailable" });
+```
+
+### Test Mode Webhooks
+
+PayRoute automatically detects test mode webhooks from Paystack and handles them appropriately:
+
+- **Detection:** Paystack sends `data.domain: "test"` for test webhooks
+- **Verification:** PayRoute uses `PAYSTACK_TEST_SECRET_KEY` (not the live key)
+- **Forwarding:** Same headers and signature process as live webhooks
+- **Logging:** Test webhooks are marked with `is_test: true` in logs
+
+Your app can check if a webhook is from test mode:
+
+```typescript
+const { event, data } = JSON.parse(body);
+
+if (data.domain === "test") {
+  console.log("Test webhook received - skip real processing");
+  // Optionally handle differently
+}
+```
+
+> **Note:** Configure `PAYSTACK_TEST_SECRET_KEY` in your PayRoute environment to receive test webhooks.
+
+### Retries and Manual Forwards
+
+When an admin triggers a **retry** or **manual forward** from the PayRoute dashboard:
+
+- Your app receives the **same payload** as the original webhook
+- The **same signature verification** applies
+- Headers (`X-PayRoute-Signature`, etc.) are regenerated with current timestamp
+
+Your app should be **idempotent** - handle the same webhook multiple times gracefully:
+
+```typescript
+export async function POST(request: NextRequest) {
+  // ... verify signature ...
+
+  const { data } = JSON.parse(body);
+  const reference = data.reference;
+
+  // Check if already processed (idempotency)
+  const existing = await db.payments.findByReference(reference);
+  if (existing) {
+    console.log(`Webhook ${reference} already processed, skipping`);
+    return NextResponse.json({ success: true, message: "Already processed" });
+  }
+
+  // Process the webhook...
+}
+```
+
 ---
 
 ## Adding a New App
